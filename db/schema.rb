@@ -10,14 +10,14 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_120407) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_16_134826) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
   create_table "users", primary_key: "user_id", force: :cascade do |t|
     t.string "calendar_id"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
-    t.string "email"
+    t.string "email", null: false
     t.boolean "email_notifications_enabled", default: true, null: false
     t.string "export_preference"
     t.string "google_access_token"
@@ -26,8 +26,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_120407) do
     t.datetime "google_token_expires_at"
     t.string "google_uid"
     t.boolean "is_onboarded", default: false, null: false
-    t.string "password"
-    t.string "username"
+    t.string "password_digest"
+    t.string "username", null: false
+    t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
+    t.index ["username"], name: "index_users_on_username", unique: true
   end
 end

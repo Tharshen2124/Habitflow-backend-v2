@@ -1,29 +1,16 @@
 # Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
 
 one:
-  username: MyString
-  email: MyString
-  password: MyString
-  google_access_token: MyString
-  google_refresh_token: MyString
-  google_uid: MyString
-  google_token_expires_at: 2026-08-16 20:04:07
-  google_scope: MyString
-  calendar_id: MyString
-  export_preference: MyString
+  username: fixture_one
+  email: fixture-one@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
   is_onboarded: false
   email_notifications_enabled: false
 
 two:
-  username: MyString
-  email: MyString
-  password: MyString
-  google_access_token: MyString
-  google_refresh_token: MyString
-  google_uid: MyString
-  google_token_expires_at: 2026-08-16 20:04:07
-  google_scope: MyString
-  calendar_id: MyString
-  export_preference: MyString
-  is_onboarded: false
+  username: fixture_two
+  email: fixture-two@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  google_uid: google-fixture-uid-2
+  is_onboarded: true
   email_notifications_enabled: false
