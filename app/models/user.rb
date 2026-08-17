@@ -1,6 +1,8 @@
 class User < ApplicationRecord
   self.primary_key = "user_id"
 
+  has_many :roles, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
+
   has_secure_password validations: false
 
   normalizes :email, with: ->(email) { email.to_s.strip.downcase }

@@ -10,6 +10,7 @@ Rails.application.routes.draw do
   get "login" => "authentication#login"
   get "callback" => "authentication#callback"
   patch "users/complete_onboarding" => "users#complete_onboarding"
+  post "onboarding/roles" => "roles#create"
 
   # Defines the root path route ("/")
   # root "posts#index"

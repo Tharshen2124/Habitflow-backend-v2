@@ -10,9 +10,27 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_16_134826) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_011236) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "goals", primary_key: "goal_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "description", null: false
+    t.boolean "is_completed", default: false, null: false
+    t.boolean "is_weekly_priority", default: false, null: false
+    t.bigint "role_id", null: false
+    t.bigint "weekly_plan_id"
+    t.index ["role_id"], name: "index_goals_on_role_id"
+  end
+
+  create_table "roles", primary_key: "role_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "icon_id"
+    t.string "role_name", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id"], name: "index_roles_on_user_id"
+  end
 
   create_table "users", primary_key: "user_id", force: :cascade do |t|
     t.string "calendar_id"
@@ -32,4 +50,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_16_134826) do
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
     t.index ["username"], name: "index_users_on_username", unique: true
   end
+
+  add_foreign_key "goals", "roles", primary_key: "role_id"
+  add_foreign_key "roles", "users", primary_key: "user_id"
 end
