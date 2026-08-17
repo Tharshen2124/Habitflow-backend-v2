@@ -11,7 +11,7 @@ Rails.application.routes.draw do
   get "callback" => "authentication#callback"
   patch "users/complete_onboarding" => "users#complete_onboarding"
   post "onboarding/roles" => "roles#create"
-
+  post "onboarding/sharpen-the-saw" => "sharpen_the_saw_activity#create"
   # Defines the root path route ("/")
   # root "posts#index"
 end

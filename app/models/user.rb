@@ -2,6 +2,7 @@ class User < ApplicationRecord
   self.primary_key = "user_id"
 
   has_many :roles, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
+  has_many :sharpen_the_saw_activities, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
 
   has_secure_password validations: false
 
