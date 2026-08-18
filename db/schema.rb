@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_125737) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_18_102435) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -36,8 +36,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_125737) do
     t.string "activity_description", null: false
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.string "dimension", null: false
+    t.boolean "is_deleted", default: false, null: false
     t.bigint "user_id", null: false
-    t.index ["user_id"], name: "index_sharpen_the_saw_activities_on_user_id"
+    t.index ["user_id", "is_deleted"], name: "index_sharpen_the_saw_activities_on_user_id_and_is_deleted"
   end
 
   create_table "tasks", primary_key: "task_id", force: :cascade do |t|

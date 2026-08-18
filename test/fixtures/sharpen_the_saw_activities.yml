@@ -9,3 +9,9 @@ two:
   user: one
   dimension: mental
   activity_description: Read for 30 minutes
+
+three:
+  user: one
+  dimension: spiritual
+  activity_description: Evening meditation
+  is_deleted: true
