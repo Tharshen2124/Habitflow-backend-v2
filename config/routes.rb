@@ -12,6 +12,7 @@ Rails.application.routes.draw do
   patch "users/complete_onboarding" => "users#complete_onboarding"
   post "onboarding/roles" => "roles#create"
   post "onboarding/sharpen-the-saw" => "sharpen_the_saw_activity#create"
+  post "onboarding/fixed-appointments" => "task#create_fixed_appointments"
   # Defines the root path route ("/")
   # root "posts#index"
 end

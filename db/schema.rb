@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_17_022348) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_17_125737) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -40,6 +40,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_022348) do
     t.index ["user_id"], name: "index_sharpen_the_saw_activities_on_user_id"
   end
 
+  create_table "tasks", primary_key: "task_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.date "daily_priority_date"
+    t.integer "day_of_week", null: false
+    t.string "description"
+    t.time "end_time", null: false
+    t.bigint "goal_id"
+    t.string "google_calendar_event_id"
+    t.boolean "is_completed", default: false, null: false
+    t.boolean "is_daily_priority", default: false, null: false
+    t.boolean "is_fixed_appointment", default: false, null: false
+    t.bigint "sharpen_the_saw_activity_id"
+    t.time "start_time", null: false
+    t.string "sync_status"
+    t.string "task_name", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "user_id", null: false
+    t.bigint "weekly_plan_id"
+    t.index ["goal_id"], name: "index_tasks_on_goal_id"
+    t.index ["sharpen_the_saw_activity_id"], name: "index_tasks_on_sharpen_the_saw_activity_id"
+    t.index ["user_id"], name: "index_tasks_on_user_id"
+  end
+
   create_table "users", primary_key: "user_id", force: :cascade do |t|
     t.string "calendar_id"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
@@ -62,4 +85,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_17_022348) do
   add_foreign_key "goals", "roles", primary_key: "role_id"
   add_foreign_key "roles", "users", primary_key: "user_id"
   add_foreign_key "sharpen_the_saw_activities", "users", primary_key: "user_id"
+  add_foreign_key "tasks", "goals", primary_key: "goal_id"
+  add_foreign_key "tasks", "sharpen_the_saw_activities", primary_key: "sharpen_the_saw_activity_id"
+  add_foreign_key "tasks", "users", primary_key: "user_id"
 end

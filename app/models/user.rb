@@ -3,6 +3,7 @@ class User < ApplicationRecord
 
   has_many :roles, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
   has_many :sharpen_the_saw_activities, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
+  has_many :tasks, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
 
   has_secure_password validations: false
 
