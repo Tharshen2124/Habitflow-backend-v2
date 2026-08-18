@@ -1,6 +1,34 @@
 require "test_helper"
 
 class RolesControllerTest < ActionDispatch::IntegrationTest
+  test "index without a token is unauthorized" do
+    get "/onboarding/roles", as: :json
+    assert_response :unauthorized
+  end
+
+  test "index returns the current user's roles with nested goals" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    get "/onboarding/roles", headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+    body = JSON.parse(response.body)
+    assert_equal 1, body["roles"].size
+    assert_equal "Professional", body["roles"].first["name"]
+    assert_equal 2, body["roles"].first["goals"].size
+  end
+
+  test "index does not return another user's roles" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    get "/onboarding/roles", headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    body = JSON.parse(response.body)
+    assert_not_includes body["roles"].map { |r| r["name"] }, "Parent"
+  end
+
   test "create without a token is unauthorized" do
     post "/onboarding/roles", params: { roles: [] }, as: :json
     assert_response :unauthorized

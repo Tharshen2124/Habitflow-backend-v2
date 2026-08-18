@@ -1,6 +1,10 @@
 class SharpenTheSawActivityController < ApplicationController
   include Authenticatable
 
+  def index
+    render json: { activities: current_user.sharpen_the_saw_activities.map { |a| activity_json(a) } }
+  end
+
   def create
     submitted_activities = params.permit(activities: [ :dimension, :activity_description ])[:activities] || []
 

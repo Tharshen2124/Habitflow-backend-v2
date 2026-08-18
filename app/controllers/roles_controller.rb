@@ -1,6 +1,10 @@
 class RolesController < ApplicationController
   include Authenticatable
 
+  def index
+    render json: { roles: current_user.roles.includes(:goals).map { |r| role_json(r) } }
+  end
+
   def create
     submitted_roles = params.permit(roles: [ :name, :icon_id, goals: [ :text, :is_weekly_priority ] ])[:roles] || []
 
