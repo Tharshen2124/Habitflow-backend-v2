@@ -8,13 +8,28 @@ module WeekScoped
 
   private
 
+  # Writes: the plan is created the first time a week is used.
   def set_weekly_plan
-    start_date = Date.iso8601(params[:week_start].to_s)
-    return render_invalid_week_start unless start_date.monday?
+    week_start = parse_week_start
+    return render_invalid_week_start if week_start.nil?
 
-    @weekly_plan = WeeklyPlan.for!(current_user, start_date)
+    @weekly_plan = WeeklyPlan.for!(current_user, week_start)
+  end
+
+  # Reads: @weekly_plan is nil when the user has not planned that week. Merely looking at a week
+  # must not bring it into existence, or every dashboard visit would plan the week for the user.
+  def find_weekly_plan
+    week_start = parse_week_start
+    return render_invalid_week_start if week_start.nil?
+
+    @weekly_plan = current_user.weekly_plans.find_by(start_date: week_start)
+  end
+
+  def parse_week_start
+    date = Date.iso8601(params[:week_start].to_s)
+    date.monday? ? date : nil
   rescue Date::Error
-    render_invalid_week_start
+    nil
   end
 
   def render_invalid_week_start

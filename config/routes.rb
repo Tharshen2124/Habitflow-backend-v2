@@ -22,6 +22,7 @@ Rails.application.routes.draw do
   get "onboarding/fixed-appointments" => "task#index_fixed_appointments"
   post "onboarding/schedule-tasks" => "task#create_scheduled_tasks"
   get "onboarding/schedule-tasks" => "task#index_scheduled_tasks"
+  get "weekly-plans" => "weekly_plans#show"
   # Defines the root path route ("/")
   # root "posts#index"
 end
