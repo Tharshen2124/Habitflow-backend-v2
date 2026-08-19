@@ -10,36 +10,50 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_19_101800) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_19_120300) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
+  create_table "goal_carryovers", primary_key: "goal_carryover_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "destination_goal_id", null: false
+    t.bigint "source_goal_id", null: false
+    t.index ["destination_goal_id"], name: "index_goal_carryovers_on_destination_goal_id", unique: true
+    t.index ["source_goal_id"], name: "index_goal_carryovers_on_source_goal_id", unique: true
+  end
+
   create_table "goals", primary_key: "goal_id", force: :cascade do |t|
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "deleted_at"
     t.string "description", null: false
     t.boolean "is_completed", default: false, null: false
     t.boolean "is_weekly_priority", default: false, null: false
     t.bigint "role_id", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.bigint "weekly_plan_id", null: false
     t.index ["role_id"], name: "index_goals_on_role_id"
+    t.index ["weekly_plan_id", "deleted_at"], name: "index_goals_on_weekly_plan_id_and_deleted_at"
     t.index ["weekly_plan_id"], name: "index_goals_on_weekly_plan_id"
   end
 
   create_table "roles", primary_key: "role_id", force: :cascade do |t|
+    t.string "color_id"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "deleted_at"
     t.string "icon_id"
     t.string "role_name", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.bigint "user_id", null: false
-    t.index ["user_id"], name: "index_roles_on_user_id"
+    t.index ["user_id", "deleted_at"], name: "index_roles_on_user_id_and_deleted_at"
   end
 
   create_table "sharpen_the_saw_activities", primary_key: "sharpen_the_saw_activity_id", force: :cascade do |t|
     t.string "activity_description", null: false
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "deleted_at"
     t.string "dimension", null: false
-    t.boolean "is_deleted", default: false, null: false
     t.bigint "user_id", null: false
-    t.index ["user_id", "is_deleted"], name: "index_sharpen_the_saw_activities_on_user_id_and_is_deleted"
+    t.index ["user_id", "deleted_at"], name: "index_sharpen_the_saw_activities_on_user_id_and_deleted_at"
   end
 
   create_table "tasks", primary_key: "task_id", force: :cascade do |t|
@@ -102,6 +116,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_19_101800) do
     t.index ["user_id", "start_date"], name: "index_weekly_plans_on_user_id_and_start_date", unique: true
   end
 
+  add_foreign_key "goal_carryovers", "goals", column: "destination_goal_id", primary_key: "goal_id"
+  add_foreign_key "goal_carryovers", "goals", column: "source_goal_id", primary_key: "goal_id"
   add_foreign_key "goals", "roles", primary_key: "role_id"
   add_foreign_key "goals", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "roles", "users", primary_key: "user_id"

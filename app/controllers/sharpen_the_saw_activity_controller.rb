@@ -52,7 +52,7 @@ class SharpenTheSawActivityController < ApplicationController
 
   # Standing-page soft-delete. The row stays so tasks.sharpen_the_saw_activity_id references stay valid.
   def destroy_activity
-    @activity.update!(is_deleted: true)
+    @activity.update!(deleted_at: Time.current)
     head :no_content
   end
 

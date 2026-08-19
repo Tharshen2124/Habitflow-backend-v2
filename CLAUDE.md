@@ -17,8 +17,25 @@ Rails 8.1.3.1 (API-only, `config.api_only = true`), Ruby 3.4.7, PostgreSQL. Uses
 ## Architecture
 
 - API-only Rails app — controllers inherit from `ActionController::API`, no view templates.
-- No GraphQL; plain REST-style JSON controllers.
-- Currently very early-stage: one model (`User`, primary key `user_id`), one controller (`AuthenticationController` with empty `signup`/`login`/`callback` stubs), routes limited to `POST /signup`, `POST /login`, `GET /callback`.
-- `users` schema already has Google OAuth/Calendar columns (`google_access_token`, `google_refresh_token`, `google_scope`, `google_uid`, `calendar_id`, etc.) — auth is being built around Google OAuth.
-- CORS is currently disabled: `config/initializers/cors.rb` has the `Rack::Cors` block commented out, and the `rack-cors` gem is commented out in the Gemfile. Uncomment both when wiring up the frontend (`next-app`).
+- No GraphQL; plain REST-style JSON controllers. JSON is shaped by private `*_json` methods inline in each controller — there is no serializer gem.
+- Models: `User`, `Role`, `Goal`, `GoalCarryover`, `Task`, `WeeklyPlan`, `SharpenTheSawActivity`, `WeeklyPlanStsActivity`. Auth is JWT (`app/lib/json_web_token.rb`) via the `Authenticatable` concern; Google OAuth via `app/services/google_oauth_client.rb`.
+- CORS is enabled (`rack-cors` gem + `config/initializers/cors.rb`); the frontend at `next-app` calls this API for real, including in its Playwright suite.
 - Secrets use Rails encrypted credentials (`config/master.key` + `config/credentials.yml.enc`), not dotenv.
+
+### Conventions the code follows but the generators do not
+
+- Every model overrides `self.primary_key`; every association spells out `foreign_key:` **and** `primary_key:`. Migrations use `id: false` + `t.primary_key :<name>_id`, and declare timestamps manually with `default: -> { "CURRENT_TIMESTAMP" }` rather than `t.timestamps`.
+- Association **declaration order is destroy order** — see the comment in `user.rb`, which is load-bearing.
+- Controllers rescue `ActiveRecord::RecordInvalid` and render `{ errors: [...] }` with 422.
+- Comments explain *why*, not *what*.
+
+### Week scoping and soft delete
+
+Every goal- and task-writing endpoint is scoped to a weekly plan the **client** names via a
+`week_start` param (always a Monday) — the server never derives "the current week", because it
+stores no timezone for the user. See the `WeekScoped` concern and `Week-Scoped-Controllers.md`.
+
+Roles, goals and Sharpen the Saw activities are soft-deleted with a `deleted_at` timestamp and a
+`scope :active`; nothing that a past week references is ever destroyed. `ArchiveRole` and
+`ArchiveGoal` (`app/services/`) are the single implementation of that rule, shared by the standing
+pages and the onboarding re-submit. `ERD_businnes_rules.md` has the full retention policy.

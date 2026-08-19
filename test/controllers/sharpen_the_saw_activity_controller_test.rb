@@ -121,7 +121,7 @@ class SharpenTheSawActivityControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :no_content
-    assert activity.reload.is_deleted
+    assert activity.reload.deleted_at.present?
   end
 
   test "destroy_activity 404s for another user's activity" do
@@ -132,7 +132,7 @@ class SharpenTheSawActivityControllerTest < ActionDispatch::IntegrationTest
       headers: { "Authorization" => "Bearer #{token}" }, as: :json
 
     assert_response :not_found
-    assert_not activity.reload.is_deleted
+    assert_nil activity.reload.deleted_at
   end
 
   test "single-record actions require a token" do

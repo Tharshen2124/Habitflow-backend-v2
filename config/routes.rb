@@ -22,6 +22,21 @@ Rails.application.routes.draw do
   get "onboarding/fixed-appointments" => "task#index_fixed_appointments"
   post "onboarding/schedule-tasks" => "task#create_scheduled_tasks"
   get "onboarding/schedule-tasks" => "task#index_scheduled_tasks"
+  # Standing roles & goals management. Goals belong to exactly one week, so every one of these is
+  # week-scoped; roles themselves are long-lived and are archived rather than deleted.
+  get "roles" => "roles#index"
+  post "roles" => "roles#create_role"
+  patch "roles/:id" => "roles#update_role"
+  delete "roles/:id" => "roles#destroy_role"
+  get "roles/:id/archive-preview" => "roles#archive_preview"
+  post "roles/:id/restore" => "roles#restore_role"
+  # The two literal paths are declared before "goals/:id" so they are not swallowed by it.
+  get "goals/carry-forward-candidates" => "goals#carry_forward_candidates"
+  post "goals/carry-forward" => "goals#carry_forward"
+  post "goals" => "goals#create"
+  patch "goals/:id" => "goals#update"
+  delete "goals/:id" => "goals#destroy"
+  post "goals/:id/restore" => "goals#restore"
   get "weekly-plans" => "weekly_plans#show"
   # Defines the root path route ("/")
   # root "posts#index"

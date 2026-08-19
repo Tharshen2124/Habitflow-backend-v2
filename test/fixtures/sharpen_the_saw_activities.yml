@@ -14,4 +14,4 @@ three:
   user: one
   dimension: spiritual
   activity_description: Evening meditation
-  is_deleted: true
+  deleted_at: <%= Time.current.to_fs(:db) %>

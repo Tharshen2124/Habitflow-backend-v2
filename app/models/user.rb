@@ -1,12 +1,13 @@
 class User < ApplicationRecord
   self.primary_key = "user_id"
 
-  # Declaration order is destroy order. Tasks reference goals, activities and plans, so they go
-  # first; weekly plans are referenced by everything, so they go last.
+  # Declaration order is destroy order. Tasks reference everything, so they go first. Weekly plans
+  # come next because destroying one clears that week's goals -- and goals have to be gone before
+  # roles are destroyed, since Role deliberately no longer destroys them.
   has_many :tasks, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
+  has_many :weekly_plans, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
   has_many :roles, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
   has_many :sharpen_the_saw_activities, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
-  has_many :weekly_plans, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
 
   has_secure_password validations: false
 
