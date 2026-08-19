@@ -2,7 +2,7 @@ require "test_helper"
 
 class TaskControllerTest < ActionDispatch::IntegrationTest
   test "index_fixed_appointments without a token is unauthorized" do
-    get "/onboarding/fixed-appointments", as: :json
+    get "/onboarding/fixed-appointments?week_start=#{FIXTURE_WEEK_START}", as: :json
     assert_response :unauthorized
   end
 
@@ -10,7 +10,8 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)
 
-    get "/onboarding/fixed-appointments", headers: { "Authorization" => "Bearer #{token}" }, as: :json
+    get "/onboarding/fixed-appointments?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
 
     assert_response :success
     body = JSON.parse(response.body)
@@ -18,8 +19,28 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Morning workout", body["appointments"].first["title"]
   end
 
+  test "index_fixed_appointments returns nothing for a week the user has not planned" do
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    get "/onboarding/fixed-appointments?week_start=2026-08-24",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+    assert_empty JSON.parse(response.body)["appointments"]
+  end
+
+  test "index_fixed_appointments with a week_start that is not a Monday is unprocessable" do
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    get "/onboarding/fixed-appointments?week_start=2026-08-18", # a Tuesday
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :unprocessable_entity
+  end
+
   test "create_fixed_appointments without a token is unauthorized" do
-    post "/onboarding/fixed-appointments", params: { appointments: [] }, as: :json
+    post "/onboarding/fixed-appointments",
+      params: { week_start: FIXTURE_WEEK_START, appointments: [] }, as: :json
     assert_response :unauthorized
   end
 
@@ -29,6 +50,7 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
 
     post "/onboarding/fixed-appointments",
       params: {
+        week_start: FIXTURE_WEEK_START,
         appointments: [
           { title: "Gym", description: "Leg day", day_of_week: 0, start_time: "06:00", end_time: "07:00" },
           { title: "Standup", day_of_week: 2, start_time: "09:00", end_time: "09:30" }
@@ -47,20 +69,43 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     assert user.tasks.all? { |t| t.goal_id.nil? && t.sharpen_the_saw_activity_id.nil? && !t.is_daily_priority }
   end
 
-  test "create_fixed_appointments replaces the user's existing fixed appointments instead of duplicating them" do
+  test "create_fixed_appointments stamps the plan for the submitted week" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)
-    old = user.tasks.create!(task_name: "Old appt", is_fixed_appointment: true, day_of_week: 0, start_time: "08:00", end_time: "09:00")
 
     post "/onboarding/fixed-appointments",
-      params: { appointments: [ { title: "New appt", day_of_week: 1, start_time: "10:00", end_time: "11:00" } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        appointments: [ { title: "Gym", day_of_week: 0, start_time: "06:00", end_time: "07:00" } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
     assert_response :created
-    assert_equal 1, user.tasks.count
-    assert_equal "New appt", user.tasks.first.task_name
+    assert_equal [ weekly_plans(:one).weekly_plan_id ], user.tasks.pluck(:weekly_plan_id).uniq
+  end
+
+  test "create_fixed_appointments replaces only that week's appointments" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    old = user.tasks.create!(task_name: "Old appt", is_fixed_appointment: true, day_of_week: 0,
+                             start_time: "08:00", end_time: "09:00", weekly_plan: weekly_plans(:one))
+    other_week = WeeklyPlan.for!(user, Date.new(2026, 8, 24))
+    kept = user.tasks.create!(task_name: "Next week appt", is_fixed_appointment: true, day_of_week: 0,
+                              start_time: "08:00", end_time: "09:00", weekly_plan: other_week)
+
+    post "/onboarding/fixed-appointments",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        appointments: [ { title: "New appt", day_of_week: 1, start_time: "10:00", end_time: "11:00" } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" },
+      as: :json
+
+    assert_response :created
     assert_not Task.exists?(old.task_id)
+    assert Task.exists?(kept.task_id)
+    assert_equal [ "New appt" ], weekly_plans(:one).tasks.pluck(:task_name)
   end
 
   test "create_fixed_appointments does not touch another user's tasks" do
@@ -69,7 +114,10 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     token = JsonWebToken.encode(user.to_token_payload)
 
     post "/onboarding/fixed-appointments",
-      params: { appointments: [ { title: "Mine", day_of_week: 0, start_time: "06:00", end_time: "07:00" } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        appointments: [ { title: "Mine", day_of_week: 0, start_time: "06:00", end_time: "07:00" } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
@@ -78,16 +126,18 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "index_scheduled_tasks without a token is unauthorized" do
-    get "/onboarding/schedule-tasks", as: :json
+    get "/onboarding/schedule-tasks?week_start=#{FIXTURE_WEEK_START}", as: :json
     assert_response :unauthorized
   end
 
   test "index_scheduled_tasks returns only the current user's non-fixed tasks" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)
-    user.tasks.create!(task_name: "Deep work", goal_id: goals(:one).goal_id, day_of_week: 1, start_time: "10:00", end_time: "11:00")
+    user.tasks.create!(task_name: "Deep work", goal_id: goals(:one).goal_id, day_of_week: 1,
+                       start_time: "10:00", end_time: "11:00", weekly_plan: weekly_plans(:one))
 
-    get "/onboarding/schedule-tasks", headers: { "Authorization" => "Bearer #{token}" }, as: :json
+    get "/onboarding/schedule-tasks?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
 
     assert_response :success
     body = JSON.parse(response.body)
@@ -97,7 +147,7 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "create_scheduled_tasks without a token is unauthorized" do
-    post "/onboarding/schedule-tasks", params: { tasks: [] }, as: :json
+    post "/onboarding/schedule-tasks", params: { week_start: FIXTURE_WEEK_START, tasks: [] }, as: :json
     assert_response :unauthorized
   end
 
@@ -107,6 +157,7 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
 
     post "/onboarding/schedule-tasks",
       params: {
+        week_start: FIXTURE_WEEK_START,
         tasks: [
           { title: "Work on milestone", day_of_week: 1, start_time: "09:00", end_time: "10:00", goal_id: goals(:one).goal_id, is_daily_priority: true },
           { title: "Morning run", day_of_week: 2, start_time: "07:00", end_time: "07:30", sharpen_the_saw_activity_id: sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id }
@@ -123,15 +174,47 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     priority_task = user.tasks.find_by(task_name: "Work on milestone")
     assert priority_task.is_daily_priority
     assert_equal goals(:one).goal_id, priority_task.goal_id
+    assert_equal [ weekly_plans(:one).weekly_plan_id ],
+                 user.tasks.where(is_fixed_appointment: false).pluck(:weekly_plan_id).uniq
+  end
+
+  test "create_scheduled_tasks commits a scheduled activity to the week" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    plan = WeeklyPlan.for!(user, Date.new(2026, 8, 24))
+    role = user.roles.first
+    goal = role.goals.create!(description: "Next week goal", weekly_plan: plan)
+    activity = sharpen_the_saw_activities(:two)
+
+    assert_empty plan.sharpen_the_saw_activities
+
+    post "/onboarding/schedule-tasks",
+      params: {
+        week_start: "2026-08-24",
+        tasks: [
+          { title: "Reading", day_of_week: 1, start_time: "20:00", end_time: "20:30", sharpen_the_saw_activity_id: activity.sharpen_the_saw_activity_id },
+          { title: "Goal work", day_of_week: 1, start_time: "09:00", end_time: "10:00", goal_id: goal.goal_id }
+        ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" },
+      as: :json
+
+    assert_response :created
+    assert_equal [ activity.sharpen_the_saw_activity_id ],
+                 plan.reload.sharpen_the_saw_activities.pluck(:sharpen_the_saw_activity_id)
   end
 
   test "create_scheduled_tasks replaces the user's existing scheduled tasks instead of duplicating them" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)
-    old = user.tasks.create!(task_name: "Old task", goal_id: goals(:one).goal_id, day_of_week: 0, start_time: "08:00", end_time: "09:00")
+    old = user.tasks.create!(task_name: "Old task", goal_id: goals(:one).goal_id, day_of_week: 0,
+                             start_time: "08:00", end_time: "09:00", weekly_plan: weekly_plans(:one))
 
     post "/onboarding/schedule-tasks",
-      params: { tasks: [ { title: "New task", day_of_week: 1, start_time: "10:00", end_time: "11:00", goal_id: goals(:one).goal_id } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "New task", day_of_week: 1, start_time: "10:00", end_time: "11:00", goal_id: goals(:one).goal_id } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
@@ -147,7 +230,10 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     fixed = tasks(:one)
 
     post "/onboarding/schedule-tasks",
-      params: { tasks: [ { title: "New task", day_of_week: 1, start_time: "10:00", end_time: "11:00", goal_id: goals(:one).goal_id } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "New task", day_of_week: 1, start_time: "10:00", end_time: "11:00", goal_id: goals(:one).goal_id } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
@@ -162,7 +248,10 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     token = JsonWebToken.encode(user.to_token_payload)
 
     post "/onboarding/schedule-tasks",
-      params: { tasks: [ { title: "Mine", day_of_week: 0, start_time: "06:00", end_time: "07:00", goal_id: goals(:one).goal_id } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "Mine", day_of_week: 0, start_time: "06:00", end_time: "07:00", goal_id: goals(:one).goal_id } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
@@ -176,7 +265,26 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     other_users_goal = goals(:three)
 
     post "/onboarding/schedule-tasks",
-      params: { tasks: [ { title: "Sneaky", day_of_week: 0, start_time: "06:00", end_time: "07:00", goal_id: other_users_goal.goal_id } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "Sneaky", day_of_week: 0, start_time: "06:00", end_time: "07:00", goal_id: other_users_goal.goal_id } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" },
+      as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal 0, user.tasks.where(is_fixed_appointment: false).count
+  end
+
+  test "create_scheduled_tasks rejects one of the user's own goals from a different week" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    post "/onboarding/schedule-tasks",
+      params: {
+        week_start: "2026-08-24",
+        tasks: [ { title: "Last week's goal", day_of_week: 0, start_time: "06:00", end_time: "07:00", goal_id: goals(:one).goal_id } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 
@@ -190,7 +298,10 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     other_users_activity = sharpen_the_saw_activities(:one)
 
     post "/onboarding/schedule-tasks",
-      params: { tasks: [ { title: "Sneaky", day_of_week: 0, start_time: "06:00", end_time: "07:00", sharpen_the_saw_activity_id: other_users_activity.sharpen_the_saw_activity_id } ] },
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "Sneaky", day_of_week: 0, start_time: "06:00", end_time: "07:00", sharpen_the_saw_activity_id: other_users_activity.sharpen_the_saw_activity_id } ]
+      },
       headers: { "Authorization" => "Bearer #{token}" },
       as: :json
 

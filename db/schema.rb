@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_18_102435) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_19_101800) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -20,8 +20,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_102435) do
     t.boolean "is_completed", default: false, null: false
     t.boolean "is_weekly_priority", default: false, null: false
     t.bigint "role_id", null: false
-    t.bigint "weekly_plan_id"
+    t.bigint "weekly_plan_id", null: false
     t.index ["role_id"], name: "index_goals_on_role_id"
+    t.index ["weekly_plan_id"], name: "index_goals_on_weekly_plan_id"
   end
 
   create_table "roles", primary_key: "role_id", force: :cascade do |t|
@@ -58,10 +59,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_102435) do
     t.string "task_name", null: false
     t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.bigint "user_id", null: false
-    t.bigint "weekly_plan_id"
+    t.bigint "weekly_plan_id", null: false
     t.index ["goal_id"], name: "index_tasks_on_goal_id"
     t.index ["sharpen_the_saw_activity_id"], name: "index_tasks_on_sharpen_the_saw_activity_id"
     t.index ["user_id"], name: "index_tasks_on_user_id"
+    t.index ["weekly_plan_id", "day_of_week"], name: "index_tasks_on_weekly_plan_id_and_day_of_week"
   end
 
   create_table "users", primary_key: "user_id", force: :cascade do |t|
@@ -83,10 +85,32 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_18_102435) do
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
+  create_table "weekly_plan_sts_activities", primary_key: "weekly_plan_sts_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "sharpen_the_saw_activity_id", null: false
+    t.bigint "weekly_plan_id", null: false
+    t.index ["sharpen_the_saw_activity_id"], name: "index_weekly_plan_sts_on_activity"
+    t.index ["weekly_plan_id", "sharpen_the_saw_activity_id"], name: "index_weekly_plan_sts_on_plan_and_activity", unique: true
+  end
+
+  create_table "weekly_plans", primary_key: "weekly_plan_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.date "end_date", null: false
+    t.date "start_date", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "start_date"], name: "index_weekly_plans_on_user_id_and_start_date", unique: true
+  end
+
   add_foreign_key "goals", "roles", primary_key: "role_id"
+  add_foreign_key "goals", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "roles", "users", primary_key: "user_id"
   add_foreign_key "sharpen_the_saw_activities", "users", primary_key: "user_id"
   add_foreign_key "tasks", "goals", primary_key: "goal_id"
   add_foreign_key "tasks", "sharpen_the_saw_activities", primary_key: "sharpen_the_saw_activity_id"
   add_foreign_key "tasks", "users", primary_key: "user_id"
+  add_foreign_key "tasks", "weekly_plans", primary_key: "weekly_plan_id"
+  add_foreign_key "weekly_plan_sts_activities", "sharpen_the_saw_activities", primary_key: "sharpen_the_saw_activity_id"
+  add_foreign_key "weekly_plan_sts_activities", "weekly_plans", primary_key: "weekly_plan_id"
+  add_foreign_key "weekly_plans", "users", primary_key: "user_id"
 end

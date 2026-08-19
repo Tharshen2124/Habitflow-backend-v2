@@ -2,6 +2,7 @@
 
 one:
   user: one
+  weekly_plan: one
   task_name: Morning workout
   description: 45 minutes at the gym
   is_fixed_appointment: true
@@ -11,6 +12,7 @@ one:
 
 two:
   user: two
+  weekly_plan: two
   task_name: Team standup
   is_fixed_appointment: true
   day_of_week: 2

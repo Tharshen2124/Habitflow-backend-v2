@@ -1,7 +1,12 @@
 class SharpenTheSawActivityController < ApplicationController
   include Authenticatable
+  include WeekScoped
 
   before_action :set_activity, only: [ :update_activity, :destroy_activity ]
+  # Only the onboarding bulk create is week-scoped. `index` backs both /onboarding/sharpen-the-saw
+  # and the standing /sharpen-the-saw-activities page, and the activity library itself belongs to
+  # the user rather than to any one week.
+  before_action :set_weekly_plan, only: [ :create ]
 
   def index
     render json: { activities: current_user.sharpen_the_saw_activities.active.map { |a| activity_json(a) } }
@@ -13,12 +18,15 @@ class SharpenTheSawActivityController < ApplicationController
     created = ActiveRecord::Base.transaction do
       current_user.sharpen_the_saw_activities.destroy_all
 
-      submitted_activities.map do |activity_params|
+      activities = submitted_activities.map do |activity_params|
         current_user.sharpen_the_saw_activities.create!(
           dimension: activity_params[:dimension],
           activity_description: activity_params[:activity_description]
         )
       end
+
+      commit_activities_to_plan(activities)
+      activities
     end
 
     render json: { activities: created.map { |a| activity_json(a) } }, status: :created
@@ -49,6 +57,17 @@ class SharpenTheSawActivityController < ApplicationController
   end
 
   private
+
+  # Onboarding has no separate "pick this week's activities" step, so everything defined here is
+  # committed to the week it was defined in.
+  def commit_activities_to_plan(activities)
+    activities.each do |activity|
+      WeeklyPlanStsActivity.find_or_create_by!(
+        weekly_plan_id: @weekly_plan.weekly_plan_id,
+        sharpen_the_saw_activity_id: activity.sharpen_the_saw_activity_id
+      )
+    end
+  end
 
   # Scoped to the current user AND active — an already-deleted or another user's id both look
   # like "not found" rather than leaking existence via a 403.

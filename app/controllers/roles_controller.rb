@@ -1,8 +1,11 @@
 class RolesController < ApplicationController
   include Authenticatable
+  include WeekScoped
+
+  before_action :set_weekly_plan
 
   def index
-    render json: { roles: current_user.roles.includes(:goals).map { |r| role_json(r) } }
+    render json: { roles: current_user.roles.preload(:goals).map { |r| role_json(r) } }
   end
 
   def create
@@ -20,7 +23,8 @@ class RolesController < ApplicationController
         (role_params[:goals] || []).each do |goal_params|
           role.goals.create!(
             description: goal_params[:text],
-            is_weekly_priority: goal_params[:is_weekly_priority] || false
+            is_weekly_priority: goal_params[:is_weekly_priority] || false,
+            weekly_plan: @weekly_plan
           )
         end
 
@@ -35,12 +39,16 @@ class RolesController < ApplicationController
 
   private
 
+  # Roles are standing; goals belong to exactly one week. A role carried into a new week starts it
+  # with an empty goals array.
   def role_json(role)
+    goals = role.goals.select { |g| g.weekly_plan_id == @weekly_plan.weekly_plan_id }
+
     {
       role_id: role.role_id,
       name: role.role_name,
       icon_id: role.icon_id,
-      goals: role.goals.map { |g| { goal_id: g.goal_id, text: g.description, is_weekly_priority: g.is_weekly_priority } }
+      goals: goals.map { |g| { goal_id: g.goal_id, text: g.description, is_weekly_priority: g.is_weekly_priority } }
     }
   end
 end

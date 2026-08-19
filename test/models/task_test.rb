@@ -4,6 +4,7 @@ class TaskTest < ActiveSupport::TestCase
   def valid_appointment_attrs
     {
       user: users(:one),
+      weekly_plan: weekly_plans(:one),
       task_name: "Dentist",
       is_fixed_appointment: true,
       day_of_week: 1,
@@ -49,5 +50,20 @@ class TaskTest < ActiveSupport::TestCase
     task = Task.new(valid_appointment_attrs.merge(daily_priority_date: Date.today))
     assert_not task.valid?
     assert_includes task.errors[:daily_priority_date], "must be blank for a fixed appointment"
+  end
+
+  test "requires a weekly plan" do
+    task = Task.new(valid_appointment_attrs.except(:weekly_plan))
+    assert_not task.valid?
+    assert_includes task.errors[:weekly_plan], "must exist"
+  end
+
+  test "a scheduled task cannot serve a goal from a different weekly plan" do
+    task = Task.new(
+      valid_appointment_attrs.merge(is_fixed_appointment: false, goal: goals(:three))
+    )
+    assert_not weekly_plans(:one).weekly_plan_id == goals(:three).weekly_plan_id
+    assert_not task.valid?
+    assert_includes task.errors[:goal_id], "must belong to the same weekly plan"
   end
 end

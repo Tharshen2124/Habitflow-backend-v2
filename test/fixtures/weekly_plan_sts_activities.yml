@@ -1,0 +1,11 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+# The two active activities of users(:one), committed to that user's plan. The soft-deleted
+# activity (:three) is deliberately not committed.
+
+one:
+  weekly_plan: one
+  sharpen_the_saw_activity: one
+
+two:
+  weekly_plan: one
+  sharpen_the_saw_activity: two

@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+# start_date is always a Monday; end_date is set explicitly because fixtures bypass the model
+# callback that derives it.
+
+one:
+  user: one
+  start_date: 2026-08-17
+  end_date: 2026-08-23
+
+two:
+  user: two
+  start_date: 2026-08-17
+  end_date: 2026-08-23

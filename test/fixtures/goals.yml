@@ -2,13 +2,16 @@
 
 one:
   role: one
+  weekly_plan: one
   description: Complete quarterly project milestone
 
 two:
   role: one
+  weekly_plan: one
   description: Mentor junior team member
   is_weekly_priority: true
 
 three:
   role: two
+  weekly_plan: two
   description: Plan weekend family activity

@@ -147,4 +147,93 @@ class SharpenTheSawActivityControllerTest < ActionDispatch::IntegrationTest
     delete "/sharpen-the-saw-activities/#{activity.sharpen_the_saw_activity_id}", as: :json
     assert_response :unauthorized
   end
+
+  # --- onboarding bulk replace (POST /onboarding/sharpen-the-saw) ---
+
+  test "create without a token is unauthorized" do
+    post "/onboarding/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activities: [] }, as: :json
+    assert_response :unauthorized
+  end
+
+  test "create with a week_start that is not a Monday is unprocessable" do
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    post "/onboarding/sharpen-the-saw",
+      params: { week_start: "2026-08-18", activities: [] }, # a Tuesday
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :unprocessable_entity
+  end
+
+  test "create replaces the user's activities" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    # Captured up front: the fixture accessor re-reads from the database and the row is gone after
+    # the request.
+    replaced_id = sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id
+
+    post "/onboarding/sharpen-the-saw",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        activities: [
+          { dimension: "physical", activity_description: "Swim" },
+          { dimension: "social", activity_description: "Call a friend" }
+        ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    assert_equal [ "Call a friend", "Swim" ],
+                 user.sharpen_the_saw_activities.pluck(:activity_description).sort
+    assert_not SharpenTheSawActivity.exists?(replaced_id)
+  end
+
+  test "create commits every activity it creates to that week's plan" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    post "/onboarding/sharpen-the-saw",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        activities: [
+          { dimension: "physical", activity_description: "Swim" },
+          { dimension: "social", activity_description: "Call a friend" }
+        ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    committed = weekly_plans(:one).sharpen_the_saw_activities.pluck(:activity_description)
+    assert_equal [ "Call a friend", "Swim" ], committed.sort
+  end
+
+  test "create discards the join rows of the activities it replaces" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    replaced_join_id = weekly_plan_sts_activities(:one).weekly_plan_sts_id
+
+    post "/onboarding/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activities: [ { dimension: "physical", activity_description: "Swim" } ] },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    assert_not WeeklyPlanStsActivity.exists?(replaced_join_id)
+    assert_equal 1, weekly_plans(:one).weekly_plan_sts_activities.count
+  end
+
+  test "create builds the weekly plan when the user has none for that week" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    assert_difference -> { user.weekly_plans.count }, 1 do
+      post "/onboarding/sharpen-the-saw",
+        params: { week_start: "2026-08-24", activities: [ { dimension: "mental", activity_description: "Read" } ] },
+        headers: { "Authorization" => "Bearer #{token}" }, as: :json
+    end
+
+    assert_response :created
+    plan = user.weekly_plans.find_by(start_date: Date.new(2026, 8, 24))
+    assert_equal [ "Read" ], plan.sharpen_the_saw_activities.pluck(:activity_description)
+  end
 end
