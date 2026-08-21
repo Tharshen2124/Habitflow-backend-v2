@@ -1,0 +1,12 @@
+# Deliberately only two days of weekly_plans(:one). `fixtures :all` loads globally, so a complete
+# week here would make "refuses to summarise an incomplete week" impossible to test; the tests that
+# need all seven build the remaining five themselves.
+one:
+  weekly_plan: one
+  day_of_week: 0
+  content: Slow start, but the morning block held once I closed the inbox.
+
+two:
+  weekly_plan: one
+  day_of_week: 1
+  content: Back-to-back meetings from midday. Nothing deep got done after them.

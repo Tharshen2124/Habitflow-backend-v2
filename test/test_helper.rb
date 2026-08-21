@@ -14,6 +14,24 @@ module ActiveSupport
     # a client-supplied `week_start`, so tests have to send one too.
     FIXTURE_WEEK_START = "2026-08-17".freeze
 
+    # Replaces one class method for the duration of a block.
+    #
+    # Minitest 6 dropped minitest/mock, so Object#stub no longer exists, and the only thing this
+    # suite wants from it is standing in for GeminiSummaryClient so the tests never touch the
+    # network. That is a dozen lines, which is a smaller commitment than webmock or a mocking gem.
+    #
+    # A callable `value` is called with the arguments the real method received -- which is how a
+    # test asserts a method was *not* reached, or makes it raise. Anything else is returned as-is.
+    def stubbing(owner, name, value)
+      original = owner.method(name)
+      replacement = value.respond_to?(:call) ? value : ->(*) { value }
+      owner.define_singleton_method(name) { |*args, **kwargs, &block| replacement.call(*args, **kwargs, &block) }
+      yield
+    ensure
+      owner.singleton_class.remove_method(name)
+      owner.define_singleton_method(name, original)
+    end
+
     # Add more helper methods to be used by all tests here...
   end
 end

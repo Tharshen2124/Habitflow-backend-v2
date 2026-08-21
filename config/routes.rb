@@ -47,6 +47,13 @@ Rails.application.routes.draw do
   get  "weekly-plans/tasks" => "task#index_scheduled_tasks"
   post "weekly-plans/tasks" => "task#create_scheduled_tasks"
   get "weekly-plans" => "weekly_plans#show"
+  # Evening reflections and the weekly AI summary. Reads and writes alike resolve the week without
+  # creating it -- a reflection belongs to a plan, so a week you never planned has nowhere to put
+  # one. The week strip is a range rather than a single week, and returns counts, never text.
+  get "weekly-plans/evening-reflections" => "evening_reflections#index"
+  put "weekly-plans/evening-reflections" => "evening_reflections#upsert"
+  get "evening-reflections/weeks" => "evening_reflections#weeks"
+  post "weekly-plans/weekly-summary" => "weekly_summaries#create"
   # Defines the root path route ("/")
   # root "posts#index"
 end

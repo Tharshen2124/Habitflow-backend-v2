@@ -10,9 +10,18 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_19_120300) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_21_100100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "evening_reflections", primary_key: "evening_reflection_id", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.integer "day_of_week", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "weekly_plan_id", null: false
+    t.index ["weekly_plan_id", "day_of_week"], name: "index_evening_reflections_on_weekly_plan_id_and_day_of_week", unique: true
+  end
 
   create_table "goal_carryovers", primary_key: "goal_carryover_id", force: :cascade do |t|
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
@@ -116,6 +125,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_19_120300) do
     t.index ["user_id", "start_date"], name: "index_weekly_plans_on_user_id_and_start_date", unique: true
   end
 
+  create_table "weekly_summaries", primary_key: "weekly_summary_id", force: :cascade do |t|
+    t.text "content", null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "generated_at", null: false
+    t.string "model", null: false
+    t.bigint "weekly_plan_id", null: false
+    t.index ["weekly_plan_id"], name: "index_weekly_summaries_on_weekly_plan_id", unique: true
+  end
+
+  add_foreign_key "evening_reflections", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "goal_carryovers", "goals", column: "destination_goal_id", primary_key: "goal_id"
   add_foreign_key "goal_carryovers", "goals", column: "source_goal_id", primary_key: "goal_id"
   add_foreign_key "goals", "roles", primary_key: "role_id"
@@ -129,4 +148,5 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_19_120300) do
   add_foreign_key "weekly_plan_sts_activities", "sharpen_the_saw_activities", primary_key: "sharpen_the_saw_activity_id"
   add_foreign_key "weekly_plan_sts_activities", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "weekly_plans", "users", primary_key: "user_id"
+  add_foreign_key "weekly_summaries", "weekly_plans", primary_key: "weekly_plan_id"
 end

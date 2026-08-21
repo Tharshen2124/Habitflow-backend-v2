@@ -33,7 +33,13 @@ module WeekScoped
   end
 
   def parse_week_start
-    date = Date.iso8601(params[:week_start].to_s)
+    parse_monday(params[:week_start])
+  end
+
+  # Extracted from parse_week_start because the reflections week strip parses a `from`/`to` pair
+  # with exactly the same rule, and a second copy of it would be a second place to get wrong.
+  def parse_monday(value)
+    date = Date.iso8601(value.to_s)
     date.monday? ? date : nil
   rescue Date::Error
     nil

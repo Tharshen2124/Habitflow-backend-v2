@@ -1,0 +1,2 @@
+# Intentionally empty: weekly_plans(:one) must start unsummarised, or every "can generate" test
+# would be testing the refusal instead. The tests that need an existing summary create one.
