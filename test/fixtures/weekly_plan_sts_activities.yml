@@ -9,3 +9,13 @@ one:
 two:
   weekly_plan: one
   sharpen_the_saw_activity: two
+
+# Both of users(:three)'s activities, including the one deleted since. The join row is not
+# soft-deleted, so the week keeps saying what it renewed with.
+past_one:
+  weekly_plan: past
+  sharpen_the_saw_activity: past_active
+
+past_two:
+  weekly_plan: past
+  sharpen_the_saw_activity: past_deleted

@@ -15,3 +15,28 @@ three:
   role: two
   weekly_plan: two
   description: Plan weekend family activity
+
+# The past week's four goals, one of each outcome the history page has to tell apart.
+past_achieved:
+  role: standing
+  weekly_plan: past
+  description: Ship the FYP
+  is_weekly_priority: true
+  is_completed: true
+
+past_missed:
+  role: standing
+  weekly_plan: past
+  description: Write the evaluation chapter
+
+past_dropped:
+  role: standing
+  weekly_plan: past
+  description: Rewrite the ERD diagram
+  deleted_at: <%= Time.current.to_fs(:db) %>
+
+past_archived_role:
+  role: retired
+  weekly_plan: past
+  description: Run the Saturday session
+  is_completed: true

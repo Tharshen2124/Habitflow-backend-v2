@@ -11,3 +11,9 @@ two:
   user: two
   start_date: 2026-08-17
   end_date: 2026-08-23
+
+# The week before FIXTURE_WEEK_START, so it is unambiguously in the past.
+past:
+  user: three
+  start_date: 2026-08-10
+  end_date: 2026-08-16

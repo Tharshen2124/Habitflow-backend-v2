@@ -14,3 +14,13 @@ two:
   google_uid: google-fixture-uid-2
   is_onboarded: true
   email_notifications_enabled: false
+
+# Dedicated to /history: it is the only user with a *past* week, and the only one carrying an
+# archived role, a dropped goal and a deleted activity at once. Kept apart from users(:one) because
+# roles_controller_test asserts that user's exact role and archived-role counts.
+three:
+  username: fixture_three
+  email: fixture-three@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  is_onboarded: true
+  email_notifications_enabled: false

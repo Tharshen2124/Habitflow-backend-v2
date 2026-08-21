@@ -47,6 +47,9 @@ Rails.application.routes.draw do
   get  "weekly-plans/tasks" => "task#index_scheduled_tasks"
   post "weekly-plans/tasks" => "task#create_scheduled_tasks"
   get "weekly-plans" => "weekly_plans#show"
+  # Ticking one task off. Not week-scoped -- the row names its own week -- and deliberately apart
+  # from the bulk creates above, which reconcile a whole week's plan.
+  patch "tasks/:id/completion" => "task#update_completion"
   # Evening reflections and the weekly AI summary. Reads and writes alike resolve the week without
   # creating it -- a reflection belongs to a plan, so a week you never planned has nowhere to put
   # one. The week strip is a range rather than a single week, and returns counts, never text.
@@ -54,6 +57,11 @@ Rails.application.routes.draw do
   put "weekly-plans/evening-reflections" => "evening_reflections#upsert"
   get "evening-reflections/weeks" => "evening_reflections#weeks"
   post "weekly-plans/weekly-summary" => "weekly_summaries#create"
+  # Past weeks, read as they were recorded rather than as they would be planned today: these are the
+  # only reads that do not filter archived roles, dropped goals and deleted activities out. The
+  # literal segment is declared first so "history/weeks" is not swallowed by "history".
+  get "history/weeks" => "history#weeks"
+  get "history" => "history#show"
   # Defines the root path route ("/")
   # root "posts#index"
 end

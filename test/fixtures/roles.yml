@@ -9,3 +9,18 @@ two:
   user: two
   role_name: Parent
   icon_id: users
+
+# users(:three)'s pair: one standing, one archived. The archived one still holds a goal in the past
+# week -- the case /history exists to keep visible and every planning read deliberately hides.
+standing:
+  user: three
+  role_name: Programmer
+  icon_id: code
+  color_id: primary
+
+retired:
+  user: three
+  role_name: Volunteer
+  icon_id: heart
+  color_id: teal
+  deleted_at: <%= Time.current.to_fs(:db) %>

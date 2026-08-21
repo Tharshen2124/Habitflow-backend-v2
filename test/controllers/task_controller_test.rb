@@ -448,4 +448,76 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_equal [ "Unknown task id" ], JSON.parse(response.body)["errors"]
   end
+
+  # --- PATCH /tasks/:id/completion -------------------------------------------------------------
+  #
+  # Until this endpoint existed, `is_completed` was read into four JSON shapes and written by none,
+  # so every task in the database sat at the column default.
+
+  test "update_completion ticks a task off" do
+    task = tasks(:past_goal_missed)
+    token = JsonWebToken.encode(users(:three).to_token_payload)
+
+    patch "/tasks/#{task.task_id}/completion",
+      params: { is_completed: true },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+    assert_equal({ "task_id" => task.task_id, "is_completed" => true }, JSON.parse(response.body)["task"])
+    assert_predicate task.reload, :is_completed
+  end
+
+  test "update_completion unticks a task" do
+    task = tasks(:past_goal_done)
+    token = JsonWebToken.encode(users(:three).to_token_payload)
+
+    patch "/tasks/#{task.task_id}/completion",
+      params: { is_completed: false },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+    assert_not task.reload.is_completed
+  end
+
+  # The End-of-Day checklist lists a 6am gym session next to everything else the day held, and the
+  # model forbids a fixed appointment a goal and a priority but says nothing about completion.
+  test "update_completion works on a fixed appointment" do
+    task = tasks(:past_fixed)
+    token = JsonWebToken.encode(users(:three).to_token_payload)
+
+    patch "/tasks/#{task.task_id}/completion",
+      params: { is_completed: true },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+    assert_predicate task.reload, :is_completed
+  end
+
+  test "update_completion needs no week_start, since the row names its own week" do
+    task = tasks(:past_goal_missed)
+    token = JsonWebToken.encode(users(:three).to_token_payload)
+
+    patch "/tasks/#{task.task_id}/completion",
+      params: { is_completed: true },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :success
+  end
+
+  test "update_completion cannot reach another user's task" do
+    task = tasks(:past_goal_done)
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    patch "/tasks/#{task.task_id}/completion",
+      params: { is_completed: false },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :not_found
+    assert_predicate task.reload, :is_completed
+  end
+
+  test "update_completion is unauthorized without a token" do
+    patch "/tasks/#{tasks(:past_fixed).task_id}/completion", params: { is_completed: true }, as: :json
+    assert_response :unauthorized
+  end
 end

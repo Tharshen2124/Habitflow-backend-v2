@@ -2,7 +2,10 @@ class TaskController < ApplicationController
   include Authenticatable
   include WeekScoped
 
-  before_action :set_weekly_plan
+  # `update_completion` is the one action that is not week-scoped: a task names its own week through
+  # `weekly_plan_id`, and demanding a `week_start` alongside the id would be asking the client to
+  # restate something the row already knows -- and to be wrong about it if the two ever disagreed.
+  before_action :set_weekly_plan, except: [ :update_completion ]
 
   def index_fixed_appointments
     render json: { appointments: plan_tasks(fixed: true).map { |t| appointment_json(t) } }
@@ -70,6 +73,25 @@ class TaskController < ApplicationController
     end
 
     render json: { tasks: plan_tasks(fixed: false).map { |t| task_json(t) } }, status: :created
+  rescue ActiveRecord::RecordInvalid => e
+    render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
+  end
+
+  # Ticking a task off, which until now nothing could do: `is_completed` was read into four JSON
+  # shapes and written by none of them, so every row sat at the column default and /history had
+  # nothing to report. Deliberately its own endpoint rather than a field on the bulk creates --
+  # those reconcile a whole week's plan, and marking one task done is not a replanning of the week.
+  #
+  # Fixed appointments are tickable too. `fixed_appointment_has_no_priority_or_links` forbids them a
+  # goal, an activity and a priority, but says nothing about completion, and the End-of-Day
+  # checklist lists a 6am gym session next to everything else the day held.
+  def update_completion
+    task = current_user.tasks.find_by(task_id: params[:id])
+    return render json: { errors: [ "Task not found" ] }, status: :not_found if task.nil?
+
+    task.update!(is_completed: ActiveModel::Type::Boolean.new.cast(params[:is_completed]))
+
+    render json: { task: { task_id: task.task_id, is_completed: task.is_completed } }
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end

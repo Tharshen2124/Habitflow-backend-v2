@@ -15,3 +15,15 @@ three:
   dimension: spiritual
   activity_description: Evening meditation
   deleted_at: <%= Time.current.to_fs(:db) %>
+
+# users(:three)'s library: one standing, one deleted since. Both were committed to the past week.
+past_active:
+  user: three
+  dimension: physical
+  activity_description: Swim on Tuesdays
+
+past_deleted:
+  user: three
+  dimension: social
+  activity_description: Call home on Sundays
+  deleted_at: <%= Time.current.to_fs(:db) %>

@@ -40,11 +40,19 @@ Roles, goals and Sharpen the Saw activities are soft-deleted with a `deleted_at`
 `ArchiveGoal` (`app/services/`) are the single implementation of that rule, shared by the standing
 pages and the onboarding re-submit. `ERD_businnes_rules.md` has the full retention policy.
 
-Two consequences worth knowing before touching a week-scoped endpoint:
+Four consequences worth knowing before touching a week-scoped endpoint:
 
 - **A read must use `find_weekly_plan`, not `set_weekly_plan`.** Only a write creates a week. A plan
   row existing is the client's only answer to "is this week planned?", and the `/weekly-plan` flow
   picks which week to offer from that answer, so a read that files a row corrupts it.
+- **`/history` is the exception to `.active`.** Planning surfaces filter archived roles, dropped
+  goals and deleted activities out; `HistoryController` deliberately does not, because a past week
+  has to read as it was recorded. It is the reason those rows are soft-deleted rather than
+  destroyed, so do not "fix" its missing scopes.
+- **`TaskController#update_completion` is the only writer of `tasks.is_completed`,** and the only
+  action in that controller that is not week-scoped — a task row already names its week. The bulk
+  creates deliberately do not permit the column: they reconcile a whole week's plan, and marking one
+  task done is not a replanning of the week.
 - **`TaskController` reconciles by `task_id` rather than rebuilding.** Rebuilding reset
   `is_completed` on every row, and `/history` and `/analytics` resolve a week through
   `task -> goal -> role`. A submitted id is updated in place; an id-less task is created; a task the
