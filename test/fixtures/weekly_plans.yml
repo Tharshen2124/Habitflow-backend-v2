@@ -17,3 +17,25 @@ past:
   user: three
   start_date: 2026-08-10
   end_date: 2026-08-16
+
+# users(:four)'s four consecutive weeks. A goal begun in the first is carried through all of them,
+# so the third week -- the one the lineage tests read -- has both a past and a future to point at.
+chain_first:
+  user: four
+  start_date: 2026-07-27
+  end_date: 2026-08-02
+
+chain_second:
+  user: four
+  start_date: 2026-08-03
+  end_date: 2026-08-09
+
+chain_third:
+  user: four
+  start_date: 2026-08-10
+  end_date: 2026-08-16
+
+chain_fourth:
+  user: four
+  start_date: 2026-08-17
+  end_date: 2026-08-23

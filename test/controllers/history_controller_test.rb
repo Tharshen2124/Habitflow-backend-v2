@@ -11,6 +11,10 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
     { "Authorization" => "Bearer #{token_for(user)}" }
   end
 
+  def goal_named(text)
+    JSON.parse(response.body)["week"]["goals"].find { |g| g["text"] == text }
+  end
+
   # --- GET /history --------------------------------------------------------------------------
 
   test "without a token is unauthorized" do
@@ -73,6 +77,33 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
     assert_not goal.key?("outcome")
     assert goal.key?("is_completed")
     assert goal.key?("is_dropped")
+  end
+
+  test "a goal carried in reports how many weeks it has been running" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:four)), as: :json
+    assert_response :success
+
+    goal = goal_named("Finish the literature review")
+    # Begun two weeks earlier and carried twice, so the third week is its third.
+    assert_equal 3, goal["week_index"]
+    # And it did not stop there -- which is what separates it from a goal simply left unfinished.
+    assert goal["is_carried_forward"]
+  end
+
+  test "a goal begun in the week itself is on its first, and points nowhere" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:four)), as: :json
+
+    goal = goal_named("Book the lab session")
+    assert_equal 1, goal["week_index"]
+    assert_not goal["is_carried_forward"]
+  end
+
+  test "a user with no carryovers at all reports every goal as a first week" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:three)), as: :json
+
+    goals = JSON.parse(response.body)["week"]["goals"]
+    assert_equal [ 1 ], goals.map { |g| g["week_index"] }.uniq
+    assert_empty goals.select { |g| g["is_carried_forward"] }
   end
 
   test "keeps an activity the user has deleted since, flagged rather than hidden" do

@@ -24,3 +24,11 @@ retired:
   icon_id: heart
   color_id: teal
   deleted_at: <%= Time.current.to_fs(:db) %>
+
+# users(:four) holds the whole carry-forward chain under one role, so the lineage is the only thing
+# the tests around it vary.
+persistent:
+  user: four
+  role_name: Researcher
+  icon_id: code
+  color_id: primary

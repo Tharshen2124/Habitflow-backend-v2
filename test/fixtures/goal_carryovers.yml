@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+# The links that make users(:four)'s four goals one lineage. Both ends are uniquely indexed, so a
+# chain is strictly linear -- no fixture here may reuse a source or a destination.
+
+chain_link_one:
+  source_goal: chain_one
+  destination_goal: chain_two
+
+chain_link_two:
+  source_goal: chain_two
+  destination_goal: chain_three
+
+chain_link_three:
+  source_goal: chain_three
+  destination_goal: chain_four

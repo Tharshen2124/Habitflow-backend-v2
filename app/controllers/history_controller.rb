@@ -78,10 +78,13 @@ class HistoryController < ApplicationController
   end
 
   def week_json(plan)
+    goals = plan.goals.includes(:role, :carried_to).order(:goal_id)
+    lineage = lineage_depths(goals)
+
     {
       week_start: plan.start_date.iso8601,
       end_date: plan.end_date.iso8601,
-      goals: plan.goals.includes(:role).order(:goal_id).map { |g| goal_json(g) },
+      goals: goals.map { |g| goal_json(g, lineage) },
       activities: plan.sharpen_the_saw_activities.order(:sharpen_the_saw_activity_id)
                       .map { |a| activity_json(a) },
       tasks: plan.tasks.includes(:sharpen_the_saw_activity, goal: :role)
@@ -93,15 +96,20 @@ class HistoryController < ApplicationController
   #
   # Goal#outcome needs to know whether the week has ended, and that is a client fact everywhere in
   # this app -- the server stores no timezone, which is why every `week_start` arrives from the
-  # browser. So the parts go over the wire and the client composes the four-way split, the same
-  # division of labour as `link_kind`/`link_text` below.
-  def goal_json(goal)
+  # browser. So the parts go over the wire and the client composes the outcome, the same division of
+  # labour as `link_kind`/`link_text` below.
+  def goal_json(goal, lineage)
     {
       goal_id: goal.goal_id,
       text: goal.description,
       is_weekly_priority: goal.is_weekly_priority,
       is_completed: goal.is_completed,
       is_dropped: goal.dropped?,
+      # How long this goal has been running, and whether it outlived the week. Together they are
+      # what separates "given up on" from "still going": a goal unfinished in a week it was carried
+      # out of is not the failure a bare cross makes it look like.
+      week_index: lineage.fetch(goal.goal_id, 1),
+      is_carried_forward: goal.carried_to.present?,
       role: {
         role_id: goal.role.role_id,
         name: goal.role.role_name,
@@ -110,6 +118,40 @@ class HistoryController < ApplicationController
         is_archived: goal.role.archived?
       }
     }
+  end
+
+  # How many weeks each of this week's goals has been running: 1 for one begun here, 2 for one
+  # carried in once, and so on.
+  #
+  # Goals are week-owned copies, so a lineage is a chain of `goal_carryovers` rows rather than a
+  # column to read. The whole chain is loaded in one query and walked in memory -- a goal on its
+  # fifth week would otherwise be four more round trips, once per goal on the panel.
+  def lineage_depths(goals)
+    parents = carryover_parents
+
+    goals.to_h do |goal|
+      depth = 1
+      current = goal.goal_id
+      # `GoalCarryover#points_forward` rejects a link that does not move strictly forwards in time,
+      # so this walk terminates. `seen` guards only against a row written before that validation.
+      seen = Set.new([ current ])
+
+      while (parent = parents[current]) && seen.add?(parent)
+        depth += 1
+        current = parent
+      end
+
+      [ goal.goal_id, depth ]
+    end
+  end
+
+  # destination -> source for every carryover this user owns. User-wide rather than week-wide: a
+  # chain reaches back past whichever week is on screen.
+  def carryover_parents
+    GoalCarryover.joins(destination_goal: :weekly_plan)
+                 .where(weekly_plans: { user_id: current_user.user_id })
+                 .pluck("goal_carryovers.destination_goal_id", "goal_carryovers.source_goal_id")
+                 .to_h
   end
 
   # Also unscoped. An activity the user has since deleted still happened in this week, and the join

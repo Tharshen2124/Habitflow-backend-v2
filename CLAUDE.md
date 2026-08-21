@@ -48,7 +48,9 @@ Four consequences worth knowing before touching a week-scoped endpoint:
 - **`/history` is the exception to `.active`.** Planning surfaces filter archived roles, dropped
   goals and deleted activities out; `HistoryController` deliberately does not, because a past week
   has to read as it was recorded. It is the reason those rows are soft-deleted rather than
-  destroyed, so do not "fix" its missing scopes.
+  destroyed, so do not "fix" its missing scopes. It is also the only reader of `goal_carryovers`
+  outside planning: `#lineage_depths` loads the user's whole chain in one query and walks it in
+  memory, because a goal on its fifth week is otherwise four more round trips per goal on the page.
 - **`TaskController#update_completion` is the only writer of `tasks.is_completed`,** and the only
   action in that controller that is not week-scoped — a task row already names its week. The bulk
   creates deliberately do not permit the column: they reconcile a whole week's plan, and marking one

@@ -24,3 +24,12 @@ three:
   password_digest: <%= BCrypt::Password.create("password123") %>
   is_onboarded: true
   email_notifications_enabled: false
+
+# Dedicated to carry-forward lineage: the only user whose goals form a chain across several weeks.
+# Kept apart from users(:three) because the week-strip tests assert that user's exact week count.
+four:
+  username: fixture_four
+  email: fixture-four@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  is_onboarded: true
+  email_notifications_enabled: false

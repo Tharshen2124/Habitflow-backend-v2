@@ -40,3 +40,32 @@ past_archived_role:
   weekly_plan: past
   description: Run the Saturday session
   is_completed: true
+
+# One goal per week, each a fresh row continuing the last -- goals are week-owned, so this is what
+# "the same goal for four weeks" actually looks like in the schema.
+chain_one:
+  role: persistent
+  weekly_plan: chain_first
+  description: Finish the literature review
+
+chain_two:
+  role: persistent
+  weekly_plan: chain_second
+  description: Finish the literature review
+
+chain_three:
+  role: persistent
+  weekly_plan: chain_third
+  description: Finish the literature review
+
+chain_four:
+  role: persistent
+  weekly_plan: chain_fourth
+  description: Finish the literature review
+
+# Begun in the third week and never carried anywhere: the control the chain is measured against.
+chain_fresh:
+  role: persistent
+  weekly_plan: chain_third
+  description: Book the lab session
+  is_completed: true
