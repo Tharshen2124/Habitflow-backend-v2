@@ -5,8 +5,11 @@ class RolesController < ApplicationController
   before_action :set_role, only: [ :update_role, :destroy_role, :archive_preview ]
   before_action :set_archived_role, only: [ :restore_role ]
   # Every action reports a role together with the goals it holds in one particular week, so they
-  # all need the week resolved first.
-  before_action :set_weekly_plan
+  # all need the week resolved first. The two pure reads resolve it without creating it: opening
+  # the roles page must not file a plan for a week the user has not planned, or the dashboard would
+  # stop offering to plan it.
+  before_action :find_weekly_plan, only: [ :index, :archive_preview ]
+  before_action :set_weekly_plan, except: [ :index, :archive_preview ]
 
   def index
     roles = current_user.roles.active.preload(:goals)
@@ -135,7 +138,7 @@ class RolesController < ApplicationController
   # with an empty goals array.
   def role_json(role)
     goals = role.goals.select do |g|
-      g.weekly_plan_id == @weekly_plan.weekly_plan_id && g.deleted_at.nil?
+      g.weekly_plan_id == @weekly_plan&.weekly_plan_id && g.deleted_at.nil?
     end
 
     {

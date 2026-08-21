@@ -2,7 +2,10 @@ class GoalsController < ApplicationController
   include Authenticatable
   include WeekScoped
 
-  before_action :set_weekly_plan
+  # Listing candidates is a pure read, so it resolves the week without creating it -- opening the
+  # planning flow must not file a plan for a week the user has not planned yet.
+  before_action :find_weekly_plan, only: [ :carry_forward_candidates ]
+  before_action :set_weekly_plan, except: [ :carry_forward_candidates ]
   before_action :set_goal, only: [ :update, :destroy ]
   before_action :set_dropped_goal, only: [ :restore ]
 
@@ -69,8 +72,14 @@ class GoalsController < ApplicationController
     destination
   end
 
+  # The most recent week the user actually planned, not simply the week before. Someone coming back
+  # after a gap has nothing at `week_start - 7`, and offering them an empty list is the same as
+  # telling them last term's goals never happened.
   def previous_week_goals
-    previous = current_user.weekly_plans.find_by(start_date: @weekly_plan.start_date - 7)
+    previous = current_user.weekly_plans
+                           .where("start_date < ?", week_start)
+                           .order(start_date: :desc)
+                           .first
     return Goal.none if previous.nil?
 
     # A goal can only be carried forward once, so anything already continued is filtered out --

@@ -10,7 +10,6 @@ module WeekScoped
 
   # Writes: the plan is created the first time a week is used.
   def set_weekly_plan
-    week_start = parse_week_start
     return render_invalid_week_start if week_start.nil?
 
     @weekly_plan = WeeklyPlan.for!(current_user, week_start)
@@ -19,10 +18,18 @@ module WeekScoped
   # Reads: @weekly_plan is nil when the user has not planned that week. Merely looking at a week
   # must not bring it into existence, or every dashboard visit would plan the week for the user.
   def find_weekly_plan
-    week_start = parse_week_start
     return render_invalid_week_start if week_start.nil?
 
     @weekly_plan = current_user.weekly_plans.find_by(start_date: week_start)
+  end
+
+  # The requested Monday itself. Exposed separately because an action behind `find_weekly_plan`
+  # still has to reason about the week even when no plan exists for it -- carry-forward has to know
+  # which week to look back from before there is anything to look back into.
+  def week_start
+    return @week_start if defined?(@week_start)
+
+    @week_start = parse_week_start
   end
 
   def parse_week_start

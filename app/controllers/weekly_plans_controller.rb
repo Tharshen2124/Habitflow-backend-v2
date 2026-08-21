@@ -2,7 +2,8 @@ class WeeklyPlansController < ApplicationController
   include Authenticatable
   include WeekScoped
 
-  before_action :find_weekly_plan
+  before_action :find_weekly_plan, only: [ :show, :sharpen_the_saw ]
+  before_action :set_weekly_plan, only: [ :update_sharpen_the_saw ]
 
   # Read-only view of one week, for the dashboard. A null plan is a normal answer, not an error:
   # it is how the client knows the week has not been planned yet.
@@ -12,7 +13,53 @@ class WeeklyPlansController < ApplicationController
     render json: { weekly_plan: weekly_plan_json(@weekly_plan) }
   end
 
+  # Which renewal activities this week is committed to. An unplanned week is committed to none --
+  # the same reasoning as `show`: an empty answer, not an error, and looking creates nothing.
+  def sharpen_the_saw
+    render json: { activity_ids: committed_activity_ids }
+  end
+
+  # Replaces the week's committed set. The activity library itself is standing and belongs to the
+  # user; this is only the statement "these are the ones I am renewing with this week".
+  def update_sharpen_the_saw
+    submitted = Array(params[:activity_ids]).map(&:to_i).uniq
+    owned = current_user.sharpen_the_saw_activities.active.pluck(:sharpen_the_saw_activity_id)
+
+    unless (submitted - owned).empty?
+      return render json: { errors: [ "Invalid sharpen the saw activity selected" ] },
+                    status: :unprocessable_entity
+    end
+
+    # An activity a task is already scheduled against stays committed even when the client leaves
+    # it out. Having put it in the calendar is the stronger statement of the two, and dropping the
+    # join row would leave the week contradicting its own schedule.
+    final = submitted | scheduled_activity_ids
+
+    ActiveRecord::Base.transaction do
+      @weekly_plan.weekly_plan_sts_activities.where.not(sharpen_the_saw_activity_id: final).destroy_all
+      final.each do |activity_id|
+        WeeklyPlanStsActivity.find_or_create_by!(
+          weekly_plan_id: @weekly_plan.weekly_plan_id,
+          sharpen_the_saw_activity_id: activity_id
+        )
+      end
+    end
+
+    render json: { activity_ids: committed_activity_ids }
+  end
+
   private
+
+  def committed_activity_ids
+    return [] if @weekly_plan.nil?
+
+    @weekly_plan.weekly_plan_sts_activities.pluck(:sharpen_the_saw_activity_id).sort
+  end
+
+  def scheduled_activity_ids
+    @weekly_plan.tasks.where.not(sharpen_the_saw_activity_id: nil)
+                .distinct.pluck(:sharpen_the_saw_activity_id)
+  end
 
   def weekly_plan_json(plan)
     tasks = plan.tasks

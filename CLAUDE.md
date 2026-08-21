@@ -39,3 +39,13 @@ Roles, goals and Sharpen the Saw activities are soft-deleted with a `deleted_at`
 `scope :active`; nothing that a past week references is ever destroyed. `ArchiveRole` and
 `ArchiveGoal` (`app/services/`) are the single implementation of that rule, shared by the standing
 pages and the onboarding re-submit. `ERD_businnes_rules.md` has the full retention policy.
+
+Two consequences worth knowing before touching a week-scoped endpoint:
+
+- **A read must use `find_weekly_plan`, not `set_weekly_plan`.** Only a write creates a week. A plan
+  row existing is the client's only answer to "is this week planned?", and the `/weekly-plan` flow
+  picks which week to offer from that answer, so a read that files a row corrupts it.
+- **`TaskController` reconciles by `task_id` rather than rebuilding.** Rebuilding reset
+  `is_completed` on every row, and `/history` and `/analytics` resolve a week through
+  `task -> goal -> role`. A submitted id is updated in place; an id-less task is created; a task the
+  client stops sending is destroyed only if unfinished, which is `ArchiveGoal`'s rule.

@@ -151,6 +151,48 @@ class GoalsControllerTest < ActionDispatch::IntegrationTest
     assert_equal weekly_plans(:one).weekly_plan_id, goals(:one).reload.weekly_plan_id
   end
 
+  test "listing carry-forward candidates does not create a plan" do
+    assert_no_difference -> { WeeklyPlan.count } do
+      get "/goals/carry-forward-candidates?week_start=2026-08-24", headers: auth, as: :json
+    end
+
+    assert_response :success
+  end
+
+  # Someone coming back after a gap has nothing at week_start - 7. Looking back only one week told
+  # them they had never set a goal in their life.
+  test "carry-forward candidates reach back past a gap to the last week actually planned" do
+    get "/goals/carry-forward-candidates?week_start=2026-09-14", headers: auth, as: :json
+
+    assert_response :success
+    assert_equal [ "Complete quarterly project milestone", "Mentor junior team member" ],
+                 JSON.parse(response.body)["candidates"].map { |c| c["text"] }.sort
+  end
+
+  test "carry-forward candidates come from the most recent planned week, not the earliest" do
+    older = @user.weekly_plans.create!(start_date: Date.new(2026, 8, 10))
+    roles(:one).goals.create!(weekly_plan: older, description: "Older goal")
+
+    get "/goals/carry-forward-candidates?week_start=2026-08-24", headers: auth, as: :json
+
+    assert_response :success
+    texts = JSON.parse(response.body)["candidates"].map { |c| c["text"] }
+    assert_not_includes texts, "Older goal"
+    assert_includes texts, "Complete quarterly project milestone"
+  end
+
+  test "carry-forward across a gap still records the link" do
+    assert_difference "GoalCarryover.count", 1 do
+      post "/goals/carry-forward",
+        params: { week_start: "2026-09-14", goal_ids: [ goals(:one).goal_id ] }, headers: auth, as: :json
+    end
+
+    assert_response :created
+    destination = Goal.find(JSON.parse(response.body)["goals"].first["goal_id"])
+    assert_equal Date.new(2026, 9, 14), destination.weekly_plan.start_date
+    assert_equal goals(:one), destination.carried_from.source_goal
+  end
+
   test "carry-forward ignores ids that are not the user's" do
     assert_no_difference "GoalCarryover.count" do
       post "/goals/carry-forward",

@@ -120,4 +120,105 @@ class WeeklyPlansControllerTest < ActionDispatch::IntegrationTest
     assert_not_equal weekly_plans(:two).weekly_plan_id, plan["weekly_plan_id"]
     assert_equal [ "Morning workout" ], plan["tasks"].map { |t| t["title"] }
   end
+
+  # ── this week's renewal activities ────────────────────────────────────────────────────────────
+  #
+  # The activity library is standing and belongs to the user; this join is only the statement
+  # "these are the ones I am renewing with this week".
+
+  def auth_for(user)
+    { "Authorization" => "Bearer #{JsonWebToken.encode(user.to_token_payload)}" }
+  end
+
+  test "sharpen-the-saw without a token is unauthorized" do
+    get "/weekly-plans/sharpen-the-saw?week_start=#{FIXTURE_WEEK_START}", as: :json
+    assert_response :unauthorized
+  end
+
+  test "sharpen-the-saw returns the activities committed to that week" do
+    get "/weekly-plans/sharpen-the-saw?week_start=#{FIXTURE_WEEK_START}",
+      headers: auth_for(users(:one)), as: :json
+
+    assert_response :success
+    assert_equal [ sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id,
+                   sharpen_the_saw_activities(:two).sharpen_the_saw_activity_id ].sort,
+                 JSON.parse(response.body)["activity_ids"]
+  end
+
+  test "sharpen-the-saw answers empty for an unplanned week without creating one" do
+    assert_no_difference -> { WeeklyPlan.count } do
+      get "/weekly-plans/sharpen-the-saw?week_start=2026-08-24",
+        headers: auth_for(users(:one)), as: :json
+    end
+
+    assert_response :success
+    assert_empty JSON.parse(response.body)["activity_ids"]
+  end
+
+  test "updating sharpen-the-saw replaces the week's set" do
+    keep = sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id
+
+    put "/weekly-plans/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activity_ids: [ keep ] },
+      headers: auth_for(users(:one)), as: :json
+
+    assert_response :success
+    assert_equal [ keep ], JSON.parse(response.body)["activity_ids"]
+    assert_equal [ keep ], weekly_plans(:one).weekly_plan_sts_activities.pluck(:sharpen_the_saw_activity_id)
+  end
+
+  # Having put an activity in the calendar is the stronger statement of the two. Dropping the join
+  # row would leave the week contradicting its own schedule.
+  test "updating sharpen-the-saw keeps an activity a task is already scheduled against" do
+    scheduled = sharpen_the_saw_activities(:two)
+    users(:one).tasks.create!(
+      weekly_plan: weekly_plans(:one), sharpen_the_saw_activity: scheduled,
+      task_name: "Read", is_fixed_appointment: false,
+      day_of_week: 1, start_time: "20:00", end_time: "20:30"
+    )
+
+    put "/weekly-plans/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activity_ids: [] },
+      headers: auth_for(users(:one)), as: :json
+
+    assert_response :success
+    assert_equal [ scheduled.sharpen_the_saw_activity_id ], JSON.parse(response.body)["activity_ids"]
+  end
+
+  test "updating sharpen-the-saw rejects an activity that is not the user's" do
+    put "/weekly-plans/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activity_ids: [ sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id ] },
+      headers: auth_for(users(:two)), as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal [ "Invalid sharpen the saw activity selected" ], JSON.parse(response.body)["errors"]
+  end
+
+  test "updating sharpen-the-saw rejects a soft-deleted activity" do
+    put "/weekly-plans/sharpen-the-saw",
+      params: { week_start: FIXTURE_WEEK_START, activity_ids: [ sharpen_the_saw_activities(:three).sharpen_the_saw_activity_id ] },
+      headers: auth_for(users(:one)), as: :json
+
+    assert_response :unprocessable_entity
+  end
+
+  # Choosing this week's activities is a write, so unlike the reads it does bring the plan into
+  # existence -- that is the point at which the user has actually planned something.
+  test "updating sharpen-the-saw creates the plan for an unplanned week" do
+    assert_difference -> { WeeklyPlan.count }, 1 do
+      put "/weekly-plans/sharpen-the-saw",
+        params: { week_start: "2026-08-24", activity_ids: [ sharpen_the_saw_activities(:one).sharpen_the_saw_activity_id ] },
+        headers: auth_for(users(:one)), as: :json
+    end
+
+    assert_response :success
+  end
+
+  test "updating sharpen-the-saw with a week_start that is not a Monday is unprocessable" do
+    put "/weekly-plans/sharpen-the-saw",
+      params: { week_start: "2026-08-18", activity_ids: [] },
+      headers: auth_for(users(:one)), as: :json
+
+    assert_response :unprocessable_entity
+  end
 end

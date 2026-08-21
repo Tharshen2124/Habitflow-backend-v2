@@ -37,6 +37,15 @@ Rails.application.routes.draw do
   patch "goals/:id" => "goals#update"
   delete "goals/:id" => "goals#destroy"
   post "goals/:id/restore" => "goals#restore"
+  # The repeatable planning flow. It shares the task controller with onboarding -- the actions are
+  # identical -- but onboarding is walked once and never returned to, so a flow the user runs every
+  # week should not be posting to /onboarding paths.
+  get  "weekly-plans/sharpen-the-saw" => "weekly_plans#sharpen_the_saw"
+  put  "weekly-plans/sharpen-the-saw" => "weekly_plans#update_sharpen_the_saw"
+  get  "weekly-plans/fixed-appointments" => "task#index_fixed_appointments"
+  post "weekly-plans/fixed-appointments" => "task#create_fixed_appointments"
+  get  "weekly-plans/tasks" => "task#index_scheduled_tasks"
+  post "weekly-plans/tasks" => "task#create_scheduled_tasks"
   get "weekly-plans" => "weekly_plans#show"
   # Defines the root path route ("/")
   # root "posts#index"

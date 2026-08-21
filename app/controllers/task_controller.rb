@@ -9,25 +9,23 @@ class TaskController < ApplicationController
   end
 
   def create_fixed_appointments
-    submitted = params.permit(appointments: [ :title, :description, :day_of_week, :start_time, :end_time ])[:appointments] || []
+    submitted = params.permit(appointments: [ :task_id, :title, :description, :day_of_week, :start_time, :end_time ])[:appointments] || []
 
-    created = ActiveRecord::Base.transaction do
-      plan_tasks(fixed: true).destroy_all
+    return render_unknown_task_id if unknown_task_ids(submitted, fixed: true).any?
 
-      submitted.map do |appt_params|
-        current_user.tasks.create!(
-          task_name: appt_params[:title],
-          description: appt_params[:description],
-          day_of_week: appt_params[:day_of_week],
-          start_time: appt_params[:start_time],
-          end_time: appt_params[:end_time],
-          is_fixed_appointment: true,
-          weekly_plan: @weekly_plan
-        )
+    ActiveRecord::Base.transaction do
+      reconcile_tasks(submitted, fixed: true) do |attrs|
+        {
+          task_name: attrs[:title],
+          description: attrs[:description],
+          day_of_week: attrs[:day_of_week],
+          start_time: attrs[:start_time],
+          end_time: attrs[:end_time]
+        }
       end
     end
 
-    render json: { appointments: created.map { |t| appointment_json(t) } }, status: :created
+    render json: { appointments: plan_tasks(fixed: true).map { |t| appointment_json(t) } }, status: :created
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
@@ -37,7 +35,9 @@ class TaskController < ApplicationController
   end
 
   def create_scheduled_tasks
-    submitted = params.permit(tasks: [ :title, :day_of_week, :start_time, :end_time, :goal_id, :sharpen_the_saw_activity_id, :is_daily_priority ])[:tasks] || []
+    submitted = params.permit(tasks: [ :task_id, :title, :day_of_week, :start_time, :end_time, :goal_id, :sharpen_the_saw_activity_id, :is_daily_priority ])[:tasks] || []
+
+    return render_unknown_task_id if unknown_task_ids(submitted, fixed: false).any?
 
     # Goals are scoped to the plan, not just to the user: a task may only serve a goal from its own
     # week. Activities are a standing library, so user-level ownership is the right check there.
@@ -53,28 +53,23 @@ class TaskController < ApplicationController
       return render json: { errors: [ "Invalid goal or sharpen the saw activity selected" ] }, status: :unprocessable_entity
     end
 
-    created = ActiveRecord::Base.transaction do
-      plan_tasks(fixed: false).destroy_all
-
-      tasks = submitted.map do |task_params|
-        current_user.tasks.create!(
-          task_name: task_params[:title],
-          day_of_week: task_params[:day_of_week],
-          start_time: task_params[:start_time],
-          end_time: task_params[:end_time],
-          goal_id: task_params[:goal_id].presence,
-          sharpen_the_saw_activity_id: task_params[:sharpen_the_saw_activity_id].presence,
-          is_daily_priority: task_params[:is_daily_priority] || false,
-          is_fixed_appointment: false,
-          weekly_plan: @weekly_plan
-        )
+    ActiveRecord::Base.transaction do
+      reconciled = reconcile_tasks(submitted, fixed: false) do |attrs|
+        {
+          task_name: attrs[:title],
+          day_of_week: attrs[:day_of_week],
+          start_time: attrs[:start_time],
+          end_time: attrs[:end_time],
+          goal_id: attrs[:goal_id].presence,
+          sharpen_the_saw_activity_id: attrs[:sharpen_the_saw_activity_id].presence,
+          is_daily_priority: attrs[:is_daily_priority] || false
+        }
       end
 
-      commit_activities_to_plan(tasks)
-      tasks
+      commit_activities_to_plan(reconciled)
     end
 
-    render json: { tasks: created.map { |t| task_json(t) } }, status: :created
+    render json: { tasks: plan_tasks(fixed: false).map { |t| task_json(t) } }, status: :created
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
@@ -82,7 +77,46 @@ class TaskController < ApplicationController
   private
 
   def plan_tasks(fixed:)
-    @weekly_plan.tasks.where(is_fixed_appointment: fixed)
+    @weekly_plan.tasks.where(is_fixed_appointment: fixed).order(:day_of_week, :start_time)
+  end
+
+  # Reconciles this week's tasks against what was submitted, rather than rebuilding them.
+  #
+  # Rebuilding handed every task a new id and reset `is_completed`, because the client has no reason
+  # to send a column it never edits. /history and /analytics resolve a week through
+  # task -> goal -> role, so one mid-week edit erased everything the user had already ticked off.
+  #
+  # A submitted id is updated in place and keeps both its id and its completion. A row the client
+  # no longer sends is one the user deleted -- and only the unfinished ones go, which is the rule
+  # ArchiveGoal already applies to a dropped goal's tasks: a completed task is a fact about that
+  # week, and letting it be deleted would let a user raise their own completion rate.
+  #
+  # Onboarding sends no ids at all, so for it every task is a create and there is nothing to delete.
+  def reconcile_tasks(submitted, fixed:)
+    existing = plan_tasks(fixed: fixed).index_by { |t| t.task_id.to_s }
+
+    kept = submitted.map do |attrs|
+      task = existing[attrs[:task_id].to_s]
+      next task.tap { |t| t.update!(yield(attrs)) } if task
+
+      current_user.tasks.create!(
+        yield(attrs).merge(is_fixed_appointment: fixed, weekly_plan: @weekly_plan)
+      )
+    end
+
+    (existing.values - kept).reject(&:is_completed).each(&:destroy!)
+    kept
+  end
+
+  # A submitted id that is not one of this week's tasks of that kind is a broken client, not a
+  # deletion. Failing loudly beats silently creating a duplicate under a fresh id.
+  def unknown_task_ids(submitted, fixed:)
+    submitted.filter_map { |t| t[:task_id].presence&.to_s } -
+      plan_tasks(fixed: fixed).pluck(:task_id).map(&:to_s)
+  end
+
+  def render_unknown_task_id
+    render json: { errors: [ "Unknown task id" ] }, status: :unprocessable_entity
   end
 
   # An activity scheduled into a week is committed to that week, even if it was added from the
@@ -103,7 +137,8 @@ class TaskController < ApplicationController
       description: task.description,
       day_of_week: task.day_of_week,
       start_time: task.start_time.strftime("%H:%M"),
-      end_time: task.end_time.strftime("%H:%M")
+      end_time: task.end_time.strftime("%H:%M"),
+      is_completed: task.is_completed
     }
   end
 
@@ -116,7 +151,8 @@ class TaskController < ApplicationController
       end_time: task.end_time.strftime("%H:%M"),
       goal_id: task.goal_id,
       sharpen_the_saw_activity_id: task.sharpen_the_saw_activity_id,
-      is_daily_priority: task.is_daily_priority
+      is_daily_priority: task.is_daily_priority,
+      is_completed: task.is_completed
     }
   end
 end

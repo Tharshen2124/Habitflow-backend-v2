@@ -205,6 +205,33 @@ class RolesControllerTest < ActionDispatch::IntegrationTest
 
   # --- standing roles page -------------------------------------------------------------------
 
+  # Opening the roles page must not file a plan for a week the user has not planned, or the
+  # dashboard stops offering to plan it and the weekly-plan flow concludes the week is handled.
+  test "listing roles for an unplanned week does not create a plan" do
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    assert_no_difference -> { WeeklyPlan.count } do
+      get "/roles?week_start=2026-08-24",
+        headers: { "Authorization" => "Bearer #{token}" }, as: :json
+    end
+
+    assert_response :success
+    assert_equal [ [] ], JSON.parse(response.body)["roles"].map { |r| r["goals"] }
+  end
+
+  test "previewing an archive for an unplanned week does not create a plan" do
+    token = JsonWebToken.encode(users(:one).to_token_payload)
+
+    assert_no_difference -> { WeeklyPlan.count } do
+      get "/roles/#{roles(:one).role_id}/archive-preview?week_start=2026-08-24",
+        headers: { "Authorization" => "Bearer #{token}" }, as: :json
+    end
+
+    assert_response :success
+    assert_equal({ "goals" => 0, "incomplete_tasks" => 0, "completed_tasks" => 0 },
+                 JSON.parse(response.body)["preview"])
+  end
+
   test "index separates active roles from archived ones" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)

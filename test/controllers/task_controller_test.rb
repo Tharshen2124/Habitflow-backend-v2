@@ -308,4 +308,144 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
     assert_response :unprocessable_entity
     assert_equal 0, user.tasks.where(is_fixed_appointment: false).count
   end
+
+  # ── reconcile ─────────────────────────────────────────────────────────────────────────────────
+  #
+  # Saving a week used to delete every task and rebuild it, which handed each one a new id and
+  # reset is_completed -- so one mid-week edit erased everything the user had ticked off, and
+  # /history and /analytics lost the week with it.
+
+  def plan_and_token
+    user = users(:one)
+    [ user, JsonWebToken.encode(user.to_token_payload) ]
+  end
+
+  def scheduled_task_for(user, name:, completed: false, day: 3)
+    user.tasks.create!(
+      weekly_plan: weekly_plans(:one), goal: goals(:one), task_name: name,
+      is_completed: completed, is_fixed_appointment: false,
+      day_of_week: day, start_time: "09:00", end_time: "10:00"
+    )
+  end
+
+  test "create_scheduled_tasks resubmitting a task_id keeps the row, its id and its completion" do
+    user, token = plan_and_token
+    done = scheduled_task_for(user, name: "Deep work", completed: true)
+
+    post "/onboarding/schedule-tasks",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { task_id: done.task_id, title: "Deep work, moved", day_of_week: 4,
+                   start_time: "13:00", end_time: "14:00", goal_id: goals(:one).goal_id } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    done.reload
+    assert_predicate done, :is_completed, "an edit must not reset what the user already finished"
+    assert_equal "Deep work, moved", done.task_name
+    assert_equal 4, done.day_of_week
+    assert_equal [ done.task_id ], JSON.parse(response.body)["tasks"].map { |t| t["task_id"] }
+  end
+
+  test "create_scheduled_tasks destroys an unfinished task the client no longer sends" do
+    user, token = plan_and_token
+    dropped = scheduled_task_for(user, name: "Never started")
+
+    post "/onboarding/schedule-tasks",
+      params: { week_start: FIXTURE_WEEK_START, tasks: [] },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    assert_not Task.exists?(dropped.task_id)
+  end
+
+  # The same rule ArchiveGoal applies to a dropped goal's tasks: a completed task is a fact about
+  # that week, and deleting it would let a user raise their own completion rate.
+  test "create_scheduled_tasks keeps a completed task the client no longer sends" do
+    user, token = plan_and_token
+    done = scheduled_task_for(user, name: "Already done", completed: true)
+
+    post "/onboarding/schedule-tasks",
+      params: { week_start: FIXTURE_WEEK_START, tasks: [] },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    assert Task.exists?(done.task_id)
+    assert_equal [ done.task_id ], JSON.parse(response.body)["tasks"].map { |t| t["task_id"] },
+                 "the response reports the week as it really stands, retained task included"
+  end
+
+  test "create_scheduled_tasks rejects a task_id that is not one of this week's tasks" do
+    user, token = plan_and_token
+    other_week = user.weekly_plans.create!(start_date: Date.new(2026, 8, 24))
+    stranger = user.tasks.create!(
+      weekly_plan: other_week, task_name: "Next week", is_fixed_appointment: false,
+      day_of_week: 1, start_time: "09:00", end_time: "10:00"
+    )
+
+    post "/onboarding/schedule-tasks",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { task_id: stranger.task_id, title: "Hijack", day_of_week: 1,
+                   start_time: "09:00", end_time: "10:00", goal_id: goals(:one).goal_id } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal [ "Unknown task id" ], JSON.parse(response.body)["errors"]
+    assert_equal "Next week", stranger.reload.task_name
+  end
+
+  test "create_scheduled_tasks with no ids still behaves as onboarding expects" do
+    user, token = plan_and_token
+    existing = scheduled_task_for(user, name: "Old plan")
+
+    post "/onboarding/schedule-tasks",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        tasks: [ { title: "Fresh", day_of_week: 1, start_time: "09:00", end_time: "10:00",
+                   goal_id: goals(:one).goal_id } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    assert_not Task.exists?(existing.task_id)
+    assert_equal [ "Fresh" ], JSON.parse(response.body)["tasks"].map { |t| t["title"] }
+  end
+
+  test "create_fixed_appointments resubmitting a task_id keeps the row and its completion" do
+    user, token = plan_and_token
+    appointment = tasks(:one)
+    appointment.update!(is_completed: true)
+
+    post "/onboarding/fixed-appointments",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        appointments: [ { task_id: appointment.task_id, title: "Morning workout", day_of_week: 1,
+                          start_time: "06:00", end_time: "07:00" } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :created
+    appointment.reload
+    assert_predicate appointment, :is_completed
+    assert_equal 1, appointment.day_of_week
+  end
+
+  test "create_fixed_appointments rejects a task_id belonging to a scheduled task" do
+    user, token = plan_and_token
+    scheduled = scheduled_task_for(user, name: "Not an appointment")
+
+    post "/onboarding/fixed-appointments",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        appointments: [ { task_id: scheduled.task_id, title: "Sneaky", day_of_week: 1,
+                          start_time: "06:00", end_time: "07:00" } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal [ "Unknown task id" ], JSON.parse(response.body)["errors"]
+  end
 end
