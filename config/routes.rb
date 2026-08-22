@@ -62,6 +62,10 @@ Rails.application.routes.draw do
   # literal segment is declared first so "history/weeks" is not swallowed by "history".
   get "history/weeks" => "history#weeks"
   get "history" => "history#show"
+  # The analytics figures: counts per planned week across a range, never content. Reads past weeks
+  # as recorded, the same way /history does, and for the same reason -- it resolves a week through
+  # `task -> goal -> role`, so archived roles and dropped goals still have to resolve.
+  get "analytics" => "analytics#show"
   # Defines the root path route ("/")
   # root "posts#index"
 end

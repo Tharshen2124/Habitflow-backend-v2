@@ -16,7 +16,6 @@ class HistoryController < ApplicationController
   # and /weekly-plan picks which week to offer from that answer.
   before_action :find_weekly_plan, only: [ :show ]
 
-  MAX_RANGE_DAYS = 52 * 7
 
   # One past week in full: its goals with the roles they belong to, the renewal activities it
   # committed to, and its schedule. A week the user never planned answers `null` -- normal, not an
@@ -31,14 +30,10 @@ class HistoryController < ApplicationController
   # a time, so shipping every week's goals just to label a list of dates would be the whole history
   # on load. Deliberately not week-scoped -- it reasons about a range, and looking creates nothing.
   def weeks
-    from = parse_monday(params[:from])
-    to = parse_monday(params[:to])
-    return render_invalid_week_start if from.nil? || to.nil?
+    range = parse_week_range
+    return if range.nil?
 
-    if to < from || (to - from).to_i > MAX_RANGE_DAYS
-      return render json: { errors: [ "Range must run forwards and cover 52 weeks or fewer" ] },
-                    status: :unprocessable_entity
-    end
+    from, to = range
 
     render json: { weeks: week_summaries(from, to) }
   end

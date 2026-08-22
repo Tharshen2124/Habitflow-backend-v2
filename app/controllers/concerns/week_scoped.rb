@@ -6,6 +6,11 @@
 module WeekScoped
   extend ActiveSupport::Concern
 
+  # The furthest a range endpoint will look. Shared rather than per-controller: /history, the
+  # reflections week strip and /analytics all read a `from`/`to` pair, and three copies of the
+  # same cap would be three places to get it wrong.
+  MAX_RANGE_DAYS = 52 * 7
+
   private
 
   # Writes: the plan is created the first time a week is used.
@@ -43,6 +48,30 @@ module WeekScoped
     date.monday? ? date : nil
   rescue Date::Error
     nil
+  end
+
+  # The `from`/`to` pair the range endpoints take, or nil once it has rendered the refusal itself.
+  # A caller reads it as:
+  #
+  #   range = parse_week_range
+  #   return if range.nil?
+  #   from, to = range
+  def parse_week_range
+    from = parse_monday(params[:from])
+    to = parse_monday(params[:to])
+
+    if from.nil? || to.nil?
+      render_invalid_week_start
+      return nil
+    end
+
+    if to < from || (to - from).to_i > MAX_RANGE_DAYS
+      render json: { errors: [ "Range must run forwards and cover 52 weeks or fewer" ] },
+             status: :unprocessable_entity
+      return nil
+    end
+
+    [ from, to ]
   end
 
   def render_invalid_week_start

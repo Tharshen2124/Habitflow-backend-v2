@@ -8,7 +8,6 @@ class EveningReflectionsController < ApplicationController
   # user never planned. Reflecting on a week you did not plan is refused, not quietly accommodated.
   before_action :find_weekly_plan, only: [ :index, :upsert ]
 
-  MAX_RANGE_DAYS = 52 * 7
 
   # One week in full: its reflections and its summary, in a single round trip. An unplanned week is
   # a normal answer, as it is for weekly_plans#show.
@@ -47,14 +46,10 @@ class EveningReflectionsController < ApplicationController
   # summarised, never the reflection text itself. Deliberately not week-scoped -- it reasons about a
   # range, and looking creates nothing.
   def weeks
-    from = parse_monday(params[:from])
-    to = parse_monday(params[:to])
-    return render_invalid_week_start if from.nil? || to.nil?
+    range = parse_week_range
+    return if range.nil?
 
-    if to < from || (to - from).to_i > MAX_RANGE_DAYS
-      return render json: { errors: [ "Range must run forwards and cover 52 weeks or fewer" ] },
-                    status: :unprocessable_entity
-    end
+    from, to = range
 
     render json: { weeks: week_summaries(from, to) }
   end
