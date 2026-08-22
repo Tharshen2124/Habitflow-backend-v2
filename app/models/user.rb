@@ -18,6 +18,9 @@ class User < ApplicationRecord
   validates :username, presence: true, uniqueness: true, length: { minimum: 3, maximum: 30 }
   validates :password_digest, presence: true, if: -> { google_uid.blank? }
   validates :password, length: { minimum: 8 }, allow_blank: true
+  # A `time` column casts anything it cannot parse to nil, so without this a malformed "HH:MM"
+  # would surface as a not-null violation rather than a 422.
+  validates :eod_time, presence: true
 
   def self.human_attribute_name(attr, options = {})
     if attr.to_s == "password_digest"

@@ -7,10 +7,13 @@ class WeeklyPlansController < ApplicationController
 
   # Read-only view of one week, for the dashboard. A null plan is a normal answer, not an error:
   # it is how the client knows the week has not been planned yet.
+  # `eod_time` rides along because the dashboard cannot decide whether to prompt for the check-in
+  # until it knows both the time and whether the week is planned, and two requests to answer one
+  # question would mean either delaying the prompt or showing it and taking it back.
   def show
-    return render json: { weekly_plan: nil } if @weekly_plan.nil?
+    return render json: { weekly_plan: nil, eod_time: eod_time } if @weekly_plan.nil?
 
-    render json: { weekly_plan: weekly_plan_json(@weekly_plan) }
+    render json: { weekly_plan: weekly_plan_json(@weekly_plan), eod_time: eod_time }
   end
 
   # Which renewal activities this week is committed to. An unplanned week is committed to none --
@@ -70,8 +73,20 @@ class WeeklyPlansController < ApplicationController
       weekly_plan_id: plan.weekly_plan_id,
       start_date: plan.start_date.iso8601,
       end_date: plan.end_date.iso8601,
-      tasks: tasks.map { |t| task_json(t) }
+      tasks: tasks.map { |t| task_json(t) },
+      check_ins: plan.check_ins.order(:day_of_week).map { |c| check_in_json(c) }
     }
+  end
+
+  # The whole week's check-ins rather than today's, because the server does not know which day is
+  # today -- it stores no timezone for the user, so the client picks its own column out of these
+  # exactly as it does with tasks.
+  def check_in_json(check_in)
+    { day_of_week: check_in.day_of_week, status: check_in.status }
+  end
+
+  def eod_time
+    current_user.eod_time.strftime("%H:%M")
   end
 
   # The link fields are returned as separate parts rather than one sentence: the display names for

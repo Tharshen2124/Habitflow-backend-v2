@@ -10,9 +10,18 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_21_100100) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_22_100100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
+
+  create_table "check_ins", primary_key: "check_in_id", force: :cascade do |t|
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.integer "day_of_week", null: false
+    t.string "status", null: false
+    t.datetime "updated_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.bigint "weekly_plan_id", null: false
+    t.index ["weekly_plan_id", "day_of_week"], name: "index_check_ins_on_weekly_plan_id_and_day_of_week", unique: true
+  end
 
   create_table "evening_reflections", primary_key: "evening_reflection_id", force: :cascade do |t|
     t.text "content", null: false
@@ -94,6 +103,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_100100) do
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.string "email", null: false
     t.boolean "email_notifications_enabled", default: true, null: false
+    t.time "eod_time", default: "2000-01-01 21:00:00", null: false
     t.string "export_preference"
     t.string "google_access_token"
     t.string "google_refresh_token"
@@ -134,6 +144,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_21_100100) do
     t.index ["weekly_plan_id"], name: "index_weekly_summaries_on_weekly_plan_id", unique: true
   end
 
+  add_foreign_key "check_ins", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "evening_reflections", "weekly_plans", primary_key: "weekly_plan_id"
   add_foreign_key "goal_carryovers", "goals", column: "destination_goal_id", primary_key: "goal_id"
   add_foreign_key "goal_carryovers", "goals", column: "source_goal_id", primary_key: "goal_id"

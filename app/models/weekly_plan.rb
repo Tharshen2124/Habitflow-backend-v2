@@ -3,9 +3,11 @@ class WeeklyPlan < ApplicationRecord
 
   belongs_to :user, foreign_key: "user_id", primary_key: "user_id"
 
-  # Reflections and the summary are leaves -- nothing else references them -- so they are declared
-  # first and destroyed first.
+  # Reflections, check-ins and the summary are leaves -- nothing else references them -- so they are
+  # declared first and destroyed first.
   has_many :evening_reflections, foreign_key: "weekly_plan_id",
+           primary_key: "weekly_plan_id", dependent: :destroy
+  has_many :check_ins, foreign_key: "weekly_plan_id",
            primary_key: "weekly_plan_id", dependent: :destroy
   has_one :weekly_summary, foreign_key: "weekly_plan_id",
           primary_key: "weekly_plan_id", dependent: :destroy

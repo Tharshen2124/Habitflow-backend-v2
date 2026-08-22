@@ -57,6 +57,14 @@ Rails.application.routes.draw do
   put "weekly-plans/evening-reflections" => "evening_reflections#upsert"
   get "evening-reflections/weeks" => "evening_reflections#weeks"
   post "weekly-plans/weekly-summary" => "weekly_summaries#create"
+  # The nightly check-in: one row per day of a planned week, recording that the user was asked and
+  # what they did about it. It replaces a localStorage stamp, which made "have I already checked in
+  # tonight?" a per-browser fact -- checking in on a laptop left the phone still prompting. The read
+  # rides along on the weekly-plan response; only the write lives here.
+  put "weekly-plans/check-in" => "check_ins#upsert"
+  # When that check-in appears. A preference rather than an event, so it sits on the user.
+  get "users/eod-time" => "users#eod_time"
+  patch "users/eod-time" => "users#update_eod_time"
   # Past weeks, read as they were recorded rather than as they would be planned today: these are the
   # only reads that do not filter archived roles, dropped goals and deleted activities out. The
   # literal segment is declared first so "history/weeks" is not swallowed by "history".
