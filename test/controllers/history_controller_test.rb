@@ -145,6 +145,33 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
     assert_nil fixed["link_kind"]
   end
 
+  # The two priorities are separate facts and a schedule draws them differently -- a weekly
+  # priority takes the reserved yellow, a daily one takes a star. Reading either off the other
+  # would have been wrong for `past_goal_missed`, which is a daily priority under a goal that is
+  # not a weekly one.
+  test "a task reports the weekly priority of the goal it served, not its own daily flag" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:three)), as: :json
+
+    by_title = JSON.parse(response.body)["week"]["tasks"].index_by { |t| t["title"] }
+
+    assert by_title["Draft chapter 3"]["is_weekly_priority"]
+    assert_not by_title["Draft chapter 3"]["is_daily_priority"]
+
+    assert_not by_title["Outline the evaluation"]["is_weekly_priority"]
+    assert by_title["Outline the evaluation"]["is_daily_priority"]
+  end
+
+  # Neither has a goal to inherit from, and the field is a boolean rather than a null so the client
+  # never has to decide what a missing one means.
+  test "a task with no goal behind it is never a weekly priority" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:three)), as: :json
+
+    by_title = JSON.parse(response.body)["week"]["tasks"].index_by { |t| t["title"] }
+
+    assert_equal false, by_title["Swim"]["is_weekly_priority"]
+    assert_equal false, by_title["Team standup"]["is_weekly_priority"]
+  end
+
   test "tasks come back ordered by day then start time" do
     get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:three)), as: :json
 

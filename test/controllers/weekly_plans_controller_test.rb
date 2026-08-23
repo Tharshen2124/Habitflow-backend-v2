@@ -78,6 +78,41 @@ class WeeklyPlansControllerTest < ActionDispatch::IntegrationTest
     assert_nil task["dimension"]
   end
 
+  # The dashboard reads a week without ever fetching its goals, so the flag has to ride on the
+  # task. It is the goal's, not the task's: `goals(:two)` is a weekly priority and `goals(:one)`
+  # is not, and the two tasks below differ in nothing else.
+  test "a goal-linked task reports whether its goal is a weekly priority" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    user.tasks.create!(task_name: "Ordinary", goal: goals(:one), day_of_week: 1,
+                       start_time: "10:00", end_time: "11:00", weekly_plan: weekly_plans(:one))
+    user.tasks.create!(task_name: "Priority work", goal: goals(:two), day_of_week: 1,
+                       start_time: "11:00", end_time: "12:00", weekly_plan: weekly_plans(:one))
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    by_title = JSON.parse(response.body)["weekly_plan"]["tasks"].index_by { |t| t["title"] }
+    assert by_title["Priority work"]["is_weekly_priority"]
+    assert_not by_title["Ordinary"]["is_weekly_priority"]
+  end
+
+  # No goal to inherit from, and a boolean rather than a null so the client never has to decide
+  # what a missing one means.
+  test "a task with no goal behind it is never a weekly priority" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    user.tasks.create!(task_name: "Morning run", sharpen_the_saw_activity: sharpen_the_saw_activities(:one),
+                       day_of_week: 1, start_time: "07:00", end_time: "07:30", weekly_plan: weekly_plans(:one))
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    by_title = JSON.parse(response.body)["weekly_plan"]["tasks"].index_by { |t| t["title"] }
+    assert_equal false, by_title["Morning run"]["is_weekly_priority"]
+    assert_equal false, by_title["Morning workout"]["is_weekly_priority"]
+  end
+
   test "describes an activity-linked task by its dimension" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)

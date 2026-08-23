@@ -101,6 +101,10 @@ class WeeklyPlansController < ApplicationController
       end_time: task.end_time.strftime("%H:%M"),
       is_fixed_appointment: task.is_fixed_appointment,
       is_daily_priority: task.is_daily_priority,
+      # The goal's flag, not the task's -- a weekly priority is a property of what the task serves.
+      # It rides along here because the dashboard reads a week without ever fetching its goals, and
+      # the calendar reserves one colour for it.
+      is_weekly_priority: task.goal&.is_weekly_priority || false,
       is_completed: task.is_completed,
       link_kind: link_kind(task),
       link_text: task.goal&.description || task.sharpen_the_saw_activity&.activity_description,

@@ -173,6 +173,9 @@ class HistoryController < ApplicationController
       end_time: task.end_time.strftime("%H:%M"),
       is_fixed_appointment: task.is_fixed_appointment,
       is_daily_priority: task.is_daily_priority,
+      # As recorded: the goal row is this week's own copy, so this is what the priority was then,
+      # not what a goal of the same name is set to now.
+      is_weekly_priority: task.goal&.is_weekly_priority || false,
       is_completed: task.is_completed,
       link_kind: link_kind(task),
       link_text: task.goal&.description || task.sharpen_the_saw_activity&.activity_description,
