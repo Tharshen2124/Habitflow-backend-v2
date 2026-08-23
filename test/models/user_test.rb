@@ -83,37 +83,33 @@ class UserTest < ActiveSupport::TestCase
     assert_not payload.key?(:password_digest)
   end
 
-  test "find_or_create_from_google! creates a new user when nothing matches" do
-    assert_difference "User.count", 1 do
-      user = User.find_or_create_from_google!(google_uid: "new-google-uid", email: "brand-new@example.com", name: "Brand New")
-      assert_equal "new-google-uid", user.google_uid
-      assert_equal "brand-new@example.com", user.email
-      assert_nil user.password_digest
+  test "link_google_account returns nil and creates nothing when nothing matches" do
+    assert_no_difference "User.count" do
+      assert_nil User.link_google_account(google_uid: "new-google-uid", email: "brand-new@example.com")
     end
   end
 
-  test "find_or_create_from_google! returns the existing user when google_uid matches" do
+  test "link_google_account returns the existing user when google_uid matches" do
     existing = users(:two)
     assert_no_difference "User.count" do
-      user = User.find_or_create_from_google!(google_uid: existing.google_uid, email: "different@example.com", name: "Different")
+      user = User.link_google_account(google_uid: existing.google_uid, email: "different@example.com")
       assert_equal existing, user
     end
   end
 
-  test "find_or_create_from_google! links to an existing user by email when google_uid does not match" do
+  test "link_google_account links to an existing user by email when google_uid does not match" do
     existing = users(:one)
     assert_nil existing.google_uid
     assert_no_difference "User.count" do
-      user = User.find_or_create_from_google!(google_uid: "linked-google-uid", email: existing.email.upcase, name: existing.username)
+      user = User.link_google_account(google_uid: "linked-google-uid", email: existing.email.upcase)
       assert_equal existing.user_id, user.user_id
       assert_equal "linked-google-uid", user.reload.google_uid
     end
   end
 
-  test "find_or_create_from_google! disambiguates a colliding auto-generated username" do
-    taken_name = users(:one).username
-    user = User.find_or_create_from_google!(google_uid: "collision-uid", email: "collision@example.com", name: taken_name)
-    assert_not_equal taken_name, user.username
-    assert user.username.start_with?(taken_name)
+  test "link_google_account leaves the linked account's password sign-in working" do
+    existing = users(:one)
+    User.link_google_account(google_uid: "linked-google-uid", email: existing.email)
+    assert existing.reload.authenticate("password123")
   end
 end

@@ -88,24 +88,39 @@ class AuthenticationControllerTest < ActionDispatch::IntegrationTest
     assert_equal "http://localhost:3001/login#error=invalid_state", response.location
   end
 
-  test "callback creates a new user and redirects with a token on success" do
+  test "callback signs in a user Google is already linked to" do
+    existing = users(:two)
     state = JsonWebToken.encode({ purpose: "google_oauth_state" }, exp: 5.minutes.from_now)
     tokens = { "access_token" => "at", "refresh_token" => "rt", "expires_in" => 3600, "scope" => "openid email profile" }
-    profile = { "sub" => "brand-new-google-uid", "email" => "new-google-user@example.com", "name" => "New Googler" }
+    profile = { "sub" => existing.google_uid, "email" => existing.email, "name" => existing.username }
 
     stub_google_oauth(exchange_result: tokens, profile_result: profile) do
-      assert_difference "User.count", 1 do
+      assert_no_difference "User.count" do
         get "/callback", params: { code: "some-code", state: state }
       end
     end
 
     assert_response :redirect
     assert_match %r{\Ahttp://localhost:3001/login#token=}, response.location
-    user = User.find_by(google_uid: "brand-new-google-uid")
-    assert_equal "at", user.google_access_token
+    assert_equal "at", existing.reload.google_access_token
   end
 
-  test "callback links to an existing user by email instead of creating a duplicate" do
+  test "callback refuses to open an account for an unknown Google address" do
+    state = JsonWebToken.encode({ purpose: "google_oauth_state" }, exp: 5.minutes.from_now)
+    tokens = { "access_token" => "at", "refresh_token" => "rt", "expires_in" => 3600, "scope" => "openid email profile" }
+    profile = { "sub" => "brand-new-google-uid", "email" => "new-google-user@example.com", "name" => "New Googler" }
+
+    stub_google_oauth(exchange_result: tokens, profile_result: profile) do
+      assert_no_difference "User.count" do
+        get "/callback", params: { code: "some-code", state: state }
+      end
+    end
+
+    assert_response :redirect
+    assert_equal "http://localhost:3001/login#error=no_account", response.location
+  end
+
+  test "callback links Google to an account that signed up with an email and password" do
     existing = users(:one)
     state = JsonWebToken.encode({ purpose: "google_oauth_state" }, exp: 5.minutes.from_now)
     tokens = { "access_token" => "at", "refresh_token" => "rt", "expires_in" => 3600, "scope" => "openid email profile" }
@@ -118,6 +133,7 @@ class AuthenticationControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :redirect
+    assert_match %r{\Ahttp://localhost:3001/login#token=}, response.location
     assert_equal "linked-google-uid", existing.reload.google_uid
   end
 end

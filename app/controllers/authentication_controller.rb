@@ -26,7 +26,11 @@ class AuthenticationController < ApplicationController
     profile = GoogleOauthClient.fetch_profile(tokens["access_token"])
     return redirect_with_error("profile_fetch_failed") unless profile
 
-    user = User.find_or_create_from_google!(google_uid: profile["sub"], email: profile["email"], name: profile["name"])
+    # Google signs a user in; it does not sign them up. An address with no account behind it is sent
+    # back to /login to create one the ordinary way rather than being handed a session.
+    user = User.link_google_account(google_uid: profile["sub"], email: profile["email"])
+    return redirect_with_error("no_account") unless user
+
     user.update!(
       google_access_token: tokens["access_token"],
       google_refresh_token: tokens["refresh_token"].presence || user.google_refresh_token,

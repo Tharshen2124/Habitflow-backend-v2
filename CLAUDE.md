@@ -19,6 +19,11 @@ Rails 8.1.3.1 (API-only, `config.api_only = true`), Ruby 3.4.7, PostgreSQL. Uses
 - API-only Rails app — controllers inherit from `ActionController::API`, no view templates.
 - No GraphQL; plain REST-style JSON controllers. JSON is shaped by private `*_json` methods inline in each controller — there is no serializer gem.
 - Models: `User`, `Role`, `Goal`, `GoalCarryover`, `Task`, `WeeklyPlan`, `SharpenTheSawActivity`, `WeeklyPlanStsActivity`. Auth is JWT (`app/lib/json_web_token.rb`) via the `Authenticatable` concern; Google OAuth via `app/services/google_oauth_client.rb`.
+- **Google signs a user in; it never signs one up.** `User.link_google_account` finds by `google_uid`,
+  falls back to linking by email, and returns nil rather than creating -- an account only ever comes
+  from `POST /signup`, which requires an email, a username and a password. The callback turns that
+  nil into `#error=no_account`. `password_digest`'s presence check stays conditional on
+  `google_uid.blank?` only for rows that predate the rule; every new account has a password.
 - CORS is enabled (`rack-cors` gem + `config/initializers/cors.rb`); the frontend at `next-app` calls this API for real, including in its Playwright suite.
 - Secrets use Rails encrypted credentials (`config/master.key` + `config/credentials.yml.enc`), not dotenv.
 
