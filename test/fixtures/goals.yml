@@ -17,12 +17,15 @@ three:
   description: Plan weekend family activity
 
 # The past week's four goals, one of each outcome the history page has to tell apart.
+#
+# Achievement is expressed through the tasks, not through `goals.is_completed` -- that column has
+# no reader left (`Goal.achieved` walks the tasks instead), so setting it here would assert a
+# meaning it no longer carries. past_achieved is achieved because tasks(:past_goal_done) is done.
 past_achieved:
   role: standing
   weekly_plan: past
   description: Ship the FYP
   is_weekly_priority: true
-  is_completed: true
 
 past_missed:
   role: standing
@@ -35,11 +38,12 @@ past_dropped:
   description: Rewrite the ERD diagram
   deleted_at: <%= Time.current.to_fs(:db) %>
 
+# Nothing is scheduled against this one, which is the not-vacuous case: it is *not* achieved, and
+# analytics_controller_test creates its task inline when it needs one.
 past_archived_role:
   role: retired
   weekly_plan: past
   description: Run the Saturday session
-  is_completed: true
 
 # One goal per week, each a fresh row continuing the last -- goals are week-owned, so this is what
 # "the same goal for four weeks" actually looks like in the schema.
@@ -68,4 +72,3 @@ chain_fresh:
   role: persistent
   weekly_plan: chain_third
   description: Book the lab session
-  is_completed: true

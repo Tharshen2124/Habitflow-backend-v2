@@ -80,8 +80,10 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
 
   test "counts active goals only, and reports the dropped one beside the ratio" do
     # Three active goals -- the dropped one is out of the denominator so pruning cannot raise the
-    # rate -- of which the achieved one and the one on the archived role were completed.
-    assert_equal({ "achieved" => 2, "total" => 3, "dropped" => 1 }, past_week["goals"])
+    # rate -- of which one had every task done. The goal on the archived role has no task scheduled
+    # against it at all, and `Goal.achieved` is deliberately not vacuous: nothing to do is not the
+    # same as everything done.
+    assert_equal({ "achieved" => 1, "total" => 3, "dropped" => 1 }, past_week["goals"])
   end
 
   # --- roles -----------------------------------------------------------------------------------

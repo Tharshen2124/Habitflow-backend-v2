@@ -75,8 +75,24 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
 
     # Whether a week has ended is a client fact, so no `outcome` is sent -- only what it is made of.
     assert_not goal.key?("outcome")
-    assert goal.key?("is_completed")
+    assert goal.key?("is_achieved")
     assert goal.key?("is_dropped")
+    # Carrying forward is reported beside the outcome, never as one: a goal can be carried out of a
+    # week it was achieved in, and the client draws both.
+    assert goal.key?("is_carried_forward")
+  end
+
+  test "is_achieved is read off the goal's tasks, not off the stored column" do
+    get "/history?week_start=#{PAST_WEEK}", headers: auth(users(:three)), as: :json
+
+    goals = JSON.parse(response.body)["week"]["goals"]
+
+    assert goals.find { |g| g["goal_id"] == goals(:past_achieved).goal_id }["is_achieved"],
+           "its one task was completed"
+    assert_not goals.find { |g| g["goal_id"] == goals(:past_missed).goal_id }["is_achieved"],
+               "its one task was not"
+    assert_not goals.find { |g| g["goal_id"] == goals(:past_archived_role).goal_id }["is_achieved"],
+               "a goal with nothing scheduled was not achieved by having nothing to do"
   end
 
   test "a goal carried in reports how many weeks it has been running" do
@@ -213,7 +229,9 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
     assert_equal PAST_WEEK, week["week_start"]
     # Three active goals: the dropped one is out of the denominator so pruning cannot raise the rate.
     assert_equal 3, week["goal_count"]
-    assert_equal 2, week["goals_achieved"]
+    # One: past_achieved, whose only task was done. past_archived_role has no task scheduled at all,
+    # which is not the same as having finished everything.
+    assert_equal 1, week["goals_achieved"]
     # Scheduled tasks only -- the fixed appointment is counted on its own tile.
     assert_equal 3, week["task_count"]
     assert_equal 2, week["tasks_completed"]

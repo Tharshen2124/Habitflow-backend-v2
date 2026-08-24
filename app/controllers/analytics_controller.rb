@@ -126,7 +126,7 @@ class AnalyticsController < ApplicationController
   def goal_counts(ids)
     goals = Goal.where(weekly_plan_id: ids)
     totals = goals.active.group(:weekly_plan_id).count
-    achieved = goals.active.where(is_completed: true).group(:weekly_plan_id).count
+    achieved = goals.active.achieved.group(:weekly_plan_id).count
     dropped = goals.dropped.group(:weekly_plan_id).count
 
     ids.index_with do |id|

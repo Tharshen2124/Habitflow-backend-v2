@@ -20,17 +20,18 @@ class Goal < ApplicationRecord
   scope :active, -> { where(deleted_at: nil) }
   scope :dropped, -> { where.not(deleted_at: nil) }
 
+  # Whether the work behind the goal actually got done, which is the only definition of "achieved"
+  # in this app -- `goals.is_completed` is a leftover that no screen ever wrote, so every figure
+  # built on it read zero. A goal is served by its tasks, and those are ticked off for real.
+  #
+  # Deliberately not vacuous: a goal nobody scheduled a single task for was not achieved by having
+  # nothing to do. It reads as missed once its week has ended, the same as one left unfinished.
+  scope :achieved, -> {
+    where("EXISTS (SELECT 1 FROM tasks WHERE tasks.goal_id = goals.goal_id)")
+      .where.not("EXISTS (SELECT 1 FROM tasks WHERE tasks.goal_id = goals.goal_id AND tasks.is_completed = false)")
+  }
+
   def dropped?
     deleted_at.present?
-  end
-
-  # How this goal resolved. `as_of` is the caller's local date, for the same reason week_start is
-  # client-supplied everywhere else: the server stores no timezone for the user, so it must not
-  # decide on its own whether a week has ended.
-  def outcome(as_of: Date.current)
-    return :dropped if dropped?
-    return :achieved if is_completed
-
-    weekly_plan.end_date < as_of ? :missed : :open
   end
 end

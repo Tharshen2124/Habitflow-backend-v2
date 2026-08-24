@@ -24,27 +24,33 @@ class GoalTest < ActiveSupport::TestCase
     assert_predicate goal, :dropped?
   end
 
-  # The three outcomes analytics reports are derived, not stored: a dropped goal is never silently
-  # removed from the week it belonged to.
-  test "outcome is dropped for an archived goal even when it was completed" do
-    goal = goals(:one)
-    goal.update!(is_completed: true, deleted_at: Time.current)
-
-    assert_equal :dropped, goal.outcome(as_of: Date.new(2026, 8, 31))
+  # "Achieved" is read off the tasks, not off `goals.is_completed` -- that column had no writer, so
+  # every figure built on it read zero.
+  test "achieved covers a goal whose every task is done" do
+    assert_includes Goal.achieved, goals(:past_achieved)
   end
 
-  test "outcome is achieved for a completed goal" do
-    goals(:one).update!(is_completed: true)
-
-    assert_equal :achieved, goals(:one).outcome(as_of: Date.new(2026, 8, 31))
+  test "achieved excludes a goal with an outstanding task" do
+    assert_not_includes Goal.achieved, goals(:past_missed)
   end
 
-  test "outcome is missed only once the week has ended" do
-    goal = goals(:one)
+  test "one unfinished task is enough to keep a goal out of achieved" do
+    goal = goals(:past_achieved)
+    goal.tasks.create!(
+      user: users(:three), weekly_plan: weekly_plans(:past), task_name: "Proofread it",
+      day_of_week: 4, start_time: "09:00", end_time: "10:00"
+    )
 
-    # weekly_plans(:one) covers 17-23 Aug 2026.
-    assert_equal :open, goal.outcome(as_of: Date.new(2026, 8, 20))
-    assert_equal :open, goal.outcome(as_of: Date.new(2026, 8, 23))
-    assert_equal :missed, goal.outcome(as_of: Date.new(2026, 8, 24))
+    assert_not_includes Goal.achieved, goal
+  end
+
+  # The case the old stored column got wrong for free: nothing scheduled is not the same as
+  # everything done, and a vacuous truth would have marked every unplanned goal achieved.
+  test "achieved excludes a goal nobody scheduled a task for" do
+    goal = goals(:past_missed)
+    goal.tasks.destroy_all
+
+    assert_empty goal.tasks
+    assert_not_includes Goal.achieved, goal
   end
 end
