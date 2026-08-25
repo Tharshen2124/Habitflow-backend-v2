@@ -33,3 +33,17 @@ four:
   password_digest: <%= BCrypt::Password.create("password123") %>
   is_onboarded: true
   email_notifications_enabled: false
+
+# The only user with a Google Calendar grant. Kept apart from the other four because every
+# task-writing test for them would otherwise enqueue a CalendarSyncJob -- and the tests asserting
+# that *no* job is enqueued need a user who could never have one.
+calendar:
+  username: fixture_calendar
+  email: fixture-calendar@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  is_onboarded: true
+  email_notifications_enabled: false
+  calendar_id: c_habitflow@group.calendar.google.com
+  calendar_access_token: fixture-calendar-access-token
+  calendar_refresh_token: fixture-calendar-refresh-token
+  calendar_token_expires_at: <%= 1.hour.from_now.to_fs(:db) %>

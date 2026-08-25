@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_24_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_25_090000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -99,12 +99,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_24_120000) do
   end
 
   create_table "users", primary_key: "user_id", force: :cascade do |t|
+    t.string "calendar_access_token"
     t.string "calendar_id"
+    t.string "calendar_refresh_token"
+    t.boolean "calendar_sync_enabled", default: true, null: false
+    t.datetime "calendar_synced_at"
+    t.datetime "calendar_token_expires_at"
     t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.string "email", null: false
     t.boolean "email_notifications_enabled", default: true, null: false
     t.time "eod_time", default: "2000-01-01 21:00:00", null: false
-    t.string "export_preference"
+    t.jsonb "export_preference"
     t.string "google_access_token"
     t.string "google_refresh_token"
     t.string "google_scope"

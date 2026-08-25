@@ -25,7 +25,12 @@ Rails 8.1.3.1 (API-only, `config.api_only = true`), Ruby 3.4.7, PostgreSQL. Uses
   nil into `#error=no_account`. `password_digest`'s presence check stays conditional on
   `google_uid.blank?` only for rows that predate the rule; every new account has a password.
 - CORS is enabled (`rack-cors` gem + `config/initializers/cors.rb`); the frontend at `next-app` calls this API for real, including in its Playwright suite.
-- Secrets use Rails encrypted credentials (`config/master.key` + `config/credentials.yml.enc`), not dotenv.
+- Secrets are **environment variables read with `ENV.fetch`**, loaded from `.env.local` by
+  `dotenv-rails` in development and test and from the real environment in production (dotenv is
+  not in the production group). `Rails.application.credentials` is referenced nowhere in `app/`,
+  `config/` or `lib/`, and `credentials.yml.enc` holds only the generator's default
+  `secret_key_base`. `.env.test` exists because dotenv deliberately does not load `.env.local`
+  in test, which is why CI passes with no secrets at all.
 
 ### Conventions the code follows but the generators do not
 

@@ -39,3 +39,9 @@ chain_fourth:
   user: four
   start_date: 2026-08-17
   end_date: 2026-08-23
+
+# users(:calendar)'s week, the one every calendar-sync test reconciles.
+calendar:
+  user: calendar
+  start_date: 2026-08-17
+  end_date: 2026-08-23

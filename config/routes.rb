@@ -65,6 +65,17 @@ Rails.application.routes.draw do
   # When that check-in appears. A preference rather than an event, so it sits on the user.
   get "users/eod-time" => "users#eod_time"
   patch "users/eod-time" => "users#update_eod_time"
+  # Google Calendar export, all of it reached from /settings. The consent screen is its own flow
+  # rather than extra scope on the sign-in above: an account opened with a password never touches
+  # that flow, and asking every user for calendar access merely to log in is a worse trade than
+  # asking the few who want it. "calendar/callback" is the only unauthenticated one -- it arrives as
+  # a redirect from Google, which cannot carry a bearer token.
+  get "calendar" => "calendar#show"
+  get "calendar/connect" => "calendar#connect"
+  get "calendar/callback" => "calendar#callback"
+  patch "calendar/settings" => "calendar#update_settings"
+  post "calendar/sync" => "calendar#sync"
+  delete "calendar" => "calendar#disconnect"
   # Past weeks, read as they were recorded rather than as they would be planned today: these are the
   # only reads that do not filter archived roles, dropped goals and deleted activities out. The
   # literal segment is declared first so "history/weeks" is not swallowed by "history".

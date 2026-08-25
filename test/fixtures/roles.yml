@@ -32,3 +32,11 @@ persistent:
   role_name: Researcher
   icon_id: code
   color_id: primary
+
+# users(:calendar)'s single role. `rose` because it is one of the four colours the role palette
+# shares with a Sharpen the Saw dimension, so the colour-mapping test covers the overlap.
+calendar:
+  user: calendar
+  role_name: Researcher
+  icon_id: book
+  color_id: rose

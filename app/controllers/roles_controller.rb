@@ -1,6 +1,7 @@
 class RolesController < ApplicationController
   include Authenticatable
   include WeekScoped
+  include CalendarSyncable
 
   before_action :set_role, only: [ :update_role, :destroy_role, :archive_preview ]
   before_action :set_archived_role, only: [ :restore_role ]
@@ -30,6 +31,7 @@ class RolesController < ApplicationController
 
     reconciled = ActiveRecord::Base.transaction { reconcile_roles(submitted_roles) }
 
+    sync_calendar_later
     render json: { roles: reconciled.map { |r| role_json(r.reload) } }, status: :created
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
@@ -45,6 +47,9 @@ class RolesController < ApplicationController
 
   def update_role
     @role.update!(role_params)
+    # A role's name and colour reach the description and the colour of every event of every task
+    # under it -- in this week and in next week's plan if one exists.
+    sync_calendar_later
     render json: { role: role_json(@role) }
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
@@ -57,7 +62,10 @@ class RolesController < ApplicationController
   end
 
   def destroy_role
-    render json: { archived: ArchiveRole.call(@role, @weekly_plan) }
+    archived = ArchiveRole.call(@role, @weekly_plan)
+    # ArchiveRole takes this week's unfinished tasks off the calendar, so their events go too.
+    sync_calendar_later
+    render json: { archived: archived }
   end
 
   def restore_role

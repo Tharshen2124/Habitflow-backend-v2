@@ -27,3 +27,10 @@ past_deleted:
   dimension: social
   activity_description: Call home on Sundays
   deleted_at: <%= Time.current.to_fs(:db) %>
+
+# users(:calendar)'s activity. `social` is the dimension whose label the server could not produce
+# until DIMENSION_LABELS moved here -- it renders "Social / Emotional", not "social".
+calendar:
+  user: calendar
+  dimension: social
+  activity_description: Call home on Sundays

@@ -1,6 +1,7 @@
 class SharpenTheSawActivityController < ApplicationController
   include Authenticatable
   include WeekScoped
+  include CalendarSyncable
 
   before_action :set_activity, only: [ :update_activity, :destroy_activity ]
   # Only the onboarding bulk create is week-scoped. `index` backs both /onboarding/sharpen-the-saw
@@ -45,6 +46,10 @@ class SharpenTheSawActivityController < ApplicationController
   # Standing-page single-record update (inline rename).
   def update_activity
     @activity.update!(activity_params)
+    # The activity's text is the "Activity:" line on every task scheduled against it. This is the
+    # one hook whose action is not otherwise week-scoped, so /settings sends it a week_start purely
+    # so the sync knows where to start -- see CalendarSyncable.
+    sync_calendar_later
     render json: { activity: activity_json(@activity) }
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
