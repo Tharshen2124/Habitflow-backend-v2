@@ -59,3 +59,43 @@ past_fixed:
   day_of_week: 0
   start_time: 2000-01-01 09:00:00
   end_time: 2000-01-01 09:30:00
+
+# users(:calendar)'s week: one task per branch the calendar exporter has to tell apart -- a
+# weekly-priority goal, an ordinary goal, a Sharpen the Saw activity, and a fixed appointment.
+calendar_priority:
+  user: calendar
+  weekly_plan: calendar
+  goal: calendar_priority
+  task_name: Write the discussion
+  day_of_week: 0
+  start_time: 2000-01-01 09:00:00
+  end_time: 2000-01-01 10:30:00
+
+calendar_plain:
+  user: calendar
+  weekly_plan: calendar
+  goal: calendar_plain
+  task_name: Read Hutchins 2019
+  is_daily_priority: true
+  day_of_week: 2
+  start_time: 2000-01-01 14:00:00
+  end_time: 2000-01-01 15:00:00
+
+calendar_activity:
+  user: calendar
+  weekly_plan: calendar
+  sharpen_the_saw_activity: calendar
+  task_name: Call home
+  day_of_week: 6
+  start_time: 2000-01-01 19:00:00
+  end_time: 2000-01-01 19:30:00
+
+calendar_fixed:
+  user: calendar
+  weekly_plan: calendar
+  task_name: Supervisor meeting
+  description: Bring the draft
+  is_fixed_appointment: true
+  day_of_week: 3
+  start_time: 2000-01-01 11:00:00
+  end_time: 2000-01-01 12:00:00

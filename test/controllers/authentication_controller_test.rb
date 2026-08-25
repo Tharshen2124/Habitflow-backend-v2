@@ -14,6 +14,31 @@ class AuthenticationControllerTest < ActionDispatch::IntegrationTest
     GoogleOauthClient.define_singleton_method(:fetch_profile, original_fetch)
   end
 
+  # The reason the calendar grant lives in its own columns. Sign-in sends prompt=consent, so Google
+  # mints a fresh refresh token on every single sign-in -- one scoped to "openid email profile" and
+  # nothing else. Sharing the columns would mean signing in with Google silently revoked calendar
+  # access, with nothing raised anywhere and the next sync failing on a token that never had the
+  # right.
+  test "signing in with Google leaves the calendar grant untouched" do
+    user = users(:calendar)
+    user.update!(google_uid: "google-fixture-uid-calendar")
+    state = JsonWebToken.encode({ purpose: AuthenticationController::STATE_PURPOSE })
+
+    stub_google_oauth(
+      exchange_result: { "access_token" => "sign-in-at", "refresh_token" => "sign-in-rt",
+                         "expires_in" => 3600, "scope" => "openid email profile" },
+      profile_result: { "sub" => "google-fixture-uid-calendar", "email" => user.email }
+    ) do
+      get "/callback", params: { code: "x", state: state }
+    end
+
+    user.reload
+    assert_equal "sign-in-rt", user.google_refresh_token
+    assert_equal "fixture-calendar-refresh-token", user.calendar_refresh_token
+    assert_equal "fixture-calendar-access-token", user.calendar_access_token
+    assert user.calendar_connected?
+  end
+
   test "signup creates a user and does not return a token" do
     assert_difference "User.count", 1 do
       post "/signup", params: { email: "fresh@example.com", username: "fresh_user", password: "password123" }

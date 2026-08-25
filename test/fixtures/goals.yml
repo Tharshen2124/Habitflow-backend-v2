@@ -72,3 +72,15 @@ chain_fresh:
   role: persistent
   weekly_plan: chain_third
   description: Book the lab session
+
+# users(:calendar)'s pair: one a weekly priority, so the reserved yellow is exercised, one not.
+calendar_priority:
+  role: calendar
+  weekly_plan: calendar
+  description: Submit the draft
+  is_weekly_priority: true
+
+calendar_plain:
+  role: calendar
+  weekly_plan: calendar
+  description: Read three papers

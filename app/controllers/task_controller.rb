@@ -1,6 +1,7 @@
 class TaskController < ApplicationController
   include Authenticatable
   include WeekScoped
+  include CalendarSyncable
 
   # `update_completion` is the one action that is not week-scoped: a task names its own week through
   # `weekly_plan_id`, and demanding a `week_start` alongside the id would be asking the client to
@@ -28,6 +29,7 @@ class TaskController < ApplicationController
       end
     end
 
+    sync_calendar_later
     render json: { appointments: plan_tasks(fixed: true).map { |t| appointment_json(t) } }, status: :created
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
@@ -72,6 +74,7 @@ class TaskController < ApplicationController
       commit_activities_to_plan(reconciled)
     end
 
+    sync_calendar_later
     render json: { tasks: plan_tasks(fixed: false).map { |t| task_json(t) } }, status: :created
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity

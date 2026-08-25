@@ -34,6 +34,27 @@ class User < ApplicationRecord
     super(attr, options)
   end
 
+  # Connected means "we hold a refresh token and a calendar to write into". The access token is
+  # deliberately not part of the question: it expires every hour and CalendarAccess mints a new one
+  # on demand, so treating an expired one as disconnected would log the user out of the feature
+  # hourly.
+  def calendar_connected?
+    calendar_refresh_token.present? && calendar_id.present?
+  end
+
+  # Used by both the explicit Disconnect button and CalendarAccess, which reaches it when Google
+  # says the grant is gone. Leaves calendar_sync_enabled alone: it is a preference, and a user who
+  # reconnects should not have to re-tick a switch they never touched.
+  def disconnect_calendar!
+    update!(
+      calendar_id: nil,
+      calendar_access_token: nil,
+      calendar_refresh_token: nil,
+      calendar_token_expires_at: nil,
+      calendar_synced_at: nil
+    )
+  end
+
   # Non-sensitive claims embedded in the JWT so the frontend can decode them client-side.
   def to_token_payload
     { user_id: user_id, email: email, username: username, is_onboarded: is_onboarded }

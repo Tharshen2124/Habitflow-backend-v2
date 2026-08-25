@@ -1,6 +1,7 @@
 class GoalsController < ApplicationController
   include Authenticatable
   include WeekScoped
+  include CalendarSyncable
 
   # Listing candidates is a pure read, so it resolves the week without creating it -- opening the
   # planning flow must not file a plan for a week the user has not planned yet.
@@ -22,13 +23,16 @@ class GoalsController < ApplicationController
 
   def update
     @goal.update!(goal_params)
+    sync_calendar_later
     render json: { goal: goal_json(@goal) }
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
 
   def destroy
-    render json: { archived: ArchiveGoal.call(@goal) }
+    archived = ArchiveGoal.call(@goal)
+    sync_calendar_later
+    render json: { archived: archived }
   end
 
   # Backs the undo affordance on the roles page. Restricted to the requested week: reviving a goal

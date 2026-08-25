@@ -32,6 +32,22 @@ module ActiveSupport
       owner.define_singleton_method(name, original)
     end
 
+    # `stubbing` for several methods on one owner at once, so a test that stands in for a whole
+    # client is not four levels of nesting deep.
+    def stubbing_all(owner, stubs, &block)
+      return block.call if stubs.empty?
+
+      name, value = stubs.first
+      stubbing(owner, name, value) { stubbing_all(owner, stubs.drop(1), &block) }
+    end
+
+    # Records the calls a stubbed method received, so a test can assert what a reconcile *did*
+    # rather than what it returned. Returns [recorded, callable] for `stubbing`.
+    def recording(returning = nil)
+      calls = []
+      [ calls, ->(*args, **kwargs) { calls << args; returning.respond_to?(:call) ? returning.call(*args, **kwargs) : returning } ]
+    end
+
     # Add more helper methods to be used by all tests here...
   end
 end
