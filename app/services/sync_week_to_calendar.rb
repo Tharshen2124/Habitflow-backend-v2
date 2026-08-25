@@ -1,3 +1,5 @@
+require "zlib"
+
 # Makes one week on the user's HabitFlow calendar match one week in the app.
 #
 # A full reconcile rather than a stream of edits, and deliberately so: a task can leave a week
@@ -12,6 +14,10 @@ class SyncWeekToCalendar
   Result = Data.define(:written, :deleted, :error) do
     def ok? = error.nil?
   end
+
+  # The first argument of pg_advisory_lock's two-key form, so this can never collide with an
+  # advisory lock taken anywhere else in the app. "HFLS" -- HabitFlow calendar sync.
+  LOCK_NAMESPACE = 0x48464C53
 
   def self.call(user:, week_start:, time_zone:)
     new(user, week_start, time_zone).call
@@ -37,11 +43,18 @@ class SyncWeekToCalendar
     plan = @user.weekly_plans.find_by(start_date: @week_start)
     return Result.new(written: 0, deleted: 0, error: nil) if plan.nil?
 
-    existing = fetch_existing
-    existing = recreate_calendar if existing.error == :not_found
-    return failure(existing.error) unless existing.ok?
+    # Serialised per user and per week, because "safe to run twice" was only ever true of two runs
+    # in sequence. Saving on /weekly-plan/edit POSTs tasks and fixed appointments in the same
+    # moment, so two jobs reconcile one week milliseconds apart: both listed Google before either
+    # inserted, both concluded the new task had no event, and both made one. Holding the lock makes
+    # the second run list *after* the first has written, so it sees that event and leaves it alone.
+    with_week_lock do
+      existing = fetch_existing
+      existing = recreate_calendar if existing.error == :not_found
+      return failure(existing.error) unless existing.ok?
 
-    reconcile(plan, existing.body)
+      reconcile(plan, existing.body)
+    end
   end
 
   private
@@ -55,9 +68,10 @@ class SyncWeekToCalendar
     wanted = tasks.select { |task| prefs.exports?(task) }
 
     matched, duplicates = index_by_task_id(events)
-    # Two events carrying one task id means an earlier run inserted twice -- a sync that failed
-    # part-way, or two saves racing through the job queue. Dropping the extras here is what makes
-    # that self-healing, and is why this needs no lock.
+    # Two events carrying one task id means something inserted twice -- a run that failed part-way,
+    # or a duplicate left behind by the races the week lock now prevents. Dropping the extras here
+    # is what heals a calendar that already has them, the lock being no help to a pair already
+    # written.
     duplicates.each { |event| remove(event, tasks) }
 
     wanted.each { |task| write(task, matched[task.task_id.to_s]) }
@@ -183,6 +197,34 @@ class SyncWeekToCalendar
     matched = grouped.transform_values { |group| group.min_by { |event| event["id"].to_s } }
     duplicates = grouped.values.flat_map { |group| group.sort_by { |event| event["id"].to_s }.drop(1) }
     [ matched, duplicates ]
+  end
+
+  # A Postgres advisory lock: no new table, no new gem, and nothing to clean up -- an advisory lock
+  # dies with the connection that holds it, so a process killed mid-sync releases it rather than
+  # wedging the week forever.
+  #
+  # The second run waits rather than bowing out. Skipping would be a lost update: the run already in
+  # flight may have read its task list before the write that enqueued this one committed, so the
+  # change that asked for a sync could go out on no run at all.
+  def with_week_lock
+    key = week_lock_key
+
+    # One connection for both statements, held until the unlock. A session-level advisory lock
+    # belongs to the connection that took it, so unlocking on a different one would leave it held.
+    ActiveRecord::Base.connection_pool.with_connection do |connection|
+      connection.execute(ActiveRecord::Base.sanitize_sql_array([ "SELECT pg_advisory_lock(?, ?)", LOCK_NAMESPACE, key ]))
+      begin
+        yield
+      ensure
+        connection.execute(ActiveRecord::Base.sanitize_sql_array([ "SELECT pg_advisory_unlock(?, ?)", LOCK_NAMESPACE, key ]))
+      end
+    end
+  end
+
+  # Folded to a signed 32-bit integer, which is what the two-key form takes. A collision between two
+  # unrelated weeks costs one of them a short wait and nothing else, so crc32 is enough.
+  def week_lock_key
+    [ Zlib.crc32("#{@user.user_id}:#{@week_start.iso8601}") ].pack("L").unpack1("l")
   end
 
   def failure(error) = Result.new(written: @written, deleted: @deleted, error: error)

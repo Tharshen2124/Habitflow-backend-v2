@@ -210,4 +210,50 @@ class SyncWeekToCalendarTest < ActiveSupport::TestCase
 
     assert_equal :disconnected, result.error
   end
+
+  # Advisory locks are held by the connection, so this counts the ones this backend holds. The test
+  # and the service share a connection, which is what lets the stub see the lock from inside.
+  def advisory_locks_held
+    ActiveRecord::Base.connection.select_value(
+      "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND granted"
+    ).to_i
+  end
+
+  # The duplicate this exists to prevent: /weekly-plan/edit POSTs tasks and fixed appointments at
+  # once, so two jobs reconciled one week at the same moment. Both listed before either inserted,
+  # so one new task became two events on the calendar. Listing has to happen under the lock for the
+  # second run to see what the first one wrote.
+  test "lists and writes holding the week's advisory lock, and releases it afterwards" do
+    during = nil
+
+    stubbing_all(GoogleCalendarClient, {
+      list_events: ->(*) {
+        during = advisory_locks_held
+        GoogleCalendarClient::Result.new(body: [], error: nil)
+      },
+      insert_event: ->(*) { GoogleCalendarClient::Result.new(body: { "id" => "e1" }, error: nil) }
+    }) do
+      assert SyncWeekToCalendar.call(user: @user, week_start: WEEK, time_zone: ZONE).ok?
+    end
+
+    assert_equal 1, during, "the reconcile must list Google while holding the week's lock"
+    assert_equal 0, advisory_locks_held, "the lock must be released once the reconcile is done"
+  end
+
+  # An exception mid-reconcile must not wedge the week: every later sync would block on the lock
+  # forever, and the failure would look like Google having gone quiet.
+  test "releases the lock when the reconcile raises" do
+    stubbing(GoogleCalendarClient, :list_events, ->(*) { raise IOError, "connection reset" }) do
+      assert_raises(IOError) { SyncWeekToCalendar.call(user: @user, week_start: WEEK, time_zone: ZONE) }
+    end
+
+    assert_equal 0, advisory_locks_held
+  end
+
+  # A week with no plan returns before the lock is taken, so an unplanned week costs nothing.
+  test "releases the lock when the listing fails" do
+    sync(list_error: :unavailable)
+
+    assert_equal 0, advisory_locks_held
+  end
 end
