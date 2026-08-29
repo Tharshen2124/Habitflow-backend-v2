@@ -3,6 +3,12 @@ require "test_helper"
 class HistoryControllerTest < ActionDispatch::IntegrationTest
   PAST_WEEK = "2026-08-10".freeze
 
+  # Every test below is about what a past week *says*, not about who may read it. Reading further
+  # back than three weeks is a paid feature, and the fixture weeks are already older than that
+  # window and get older every day -- so the accounts are put on the paid tier here, and the window
+  # itself is asserted on its own at the end of the file, against dates relative to today.
+  setup { premium!(users(:one), users(:two), users(:three), users(:four)) }
+
   def token_for(user)
     JsonWebToken.encode(user.to_token_payload)
   end
@@ -251,5 +257,99 @@ class HistoryControllerTest < ActionDispatch::IntegrationTest
     get "/history/weeks?from=2026-07-06&to=2026-08-17", headers: auth(users(:three)), as: :json
 
     assert_equal [ PAST_WEEK, "2026-08-03" ], JSON.parse(response.body)["weeks"].map { |w| w["week_start"] }
+  end
+
+  # --- the free tier's three-week window -------------------------------------------------------
+
+  # Relative to today rather than to the fixture week, because the floor is. A test pinned to a
+  # Monday in 2026 would pass until that Monday fell out of the window and then fail for good.
+  def monday_back(weeks)
+    ((Date.current - 1).beginning_of_week(:monday) - (weeks * 7)).iso8601
+  end
+
+  # A relative Monday can land on a week the fixtures already planned, and which one it lands on
+  # changes with the date -- so this asks for the row rather than insisting on creating it.
+  def plan_for(user, start_date)
+    WeeklyPlan.find_or_create_by!(user_id: user.user_id, start_date: start_date)
+  end
+
+  def free(user)
+    user.update!(subscription_status: nil, subscription_period_end: nil)
+    user
+  end
+
+  test "a free account may read the third week back" do
+    get "/history?week_start=#{monday_back(3)}", headers: auth(free(users(:three))), as: :json
+
+    assert_response :success
+  end
+
+  test "a free account is refused the fourth week back" do
+    get "/history?week_start=#{monday_back(4)}", headers: auth(free(users(:three))), as: :json
+
+    assert_response :payment_required
+  end
+
+  # Refused outright rather than answered `{ week: nil }`. That answer already means something
+  # specific here -- "you never planned this week" -- and reusing it would tell a user their own
+  # past was empty, which is a worse lie than saying no.
+  test "a week behind the window is refused rather than reported as unplanned" do
+    plan_for(users(:three), Date.parse(monday_back(6)))
+
+    get "/history?week_start=#{monday_back(6)}", headers: auth(free(users(:three))), as: :json
+
+    assert_response :payment_required
+    assert_nil JSON.parse(response.body)["week"]
+  end
+
+  test "a paid account reads as far back as the range cap allows" do
+    get "/history?week_start=#{monday_back(30)}", headers: auth(users(:three)), as: :json
+
+    assert_response :success
+  end
+
+  test "the week strip clamps a free account's range instead of refusing it" do
+    inside = Date.parse(monday_back(2))
+    outside = Date.parse(monday_back(10))
+    plan_for(users(:three), inside)
+    plan_for(users(:three), outside)
+
+    get "/history/weeks?from=#{monday_back(20)}&to=#{monday_back(1)}",
+        headers: auth(free(users(:three))), as: :json
+
+    assert_response :success
+    starts = JSON.parse(response.body)["weeks"].map { |w| w["week_start"] }
+    assert_includes starts, inside.iso8601
+    assert_not_includes starts, outside.iso8601
+  end
+
+  # A window that ends before the floor begins is empty, not backwards: the clamp must not turn a
+  # legitimate request into the range guard's "must run forwards" refusal.
+  test "the week strip is empty rather than an error when the whole range is behind the window" do
+    get "/history/weeks?from=#{monday_back(20)}&to=#{monday_back(10)}",
+        headers: auth(free(users(:three))), as: :json
+
+    assert_response :success
+    assert_equal [], JSON.parse(response.body)["weeks"]
+  end
+
+  test "the week strip says which tier it answered for" do
+    get "/history/weeks?from=#{monday_back(3)}&to=#{monday_back(1)}",
+        headers: auth(users(:three)), as: :json
+    assert_equal true, JSON.parse(response.body)["premium"]
+
+    get "/history/weeks?from=#{monday_back(3)}&to=#{monday_back(1)}",
+        headers: auth(free(users(:three))), as: :json
+    assert_equal false, JSON.parse(response.body)["premium"]
+  end
+
+  test "a paid account's range is not clamped" do
+    outside = Date.parse(monday_back(10))
+    plan_for(users(:three), outside)
+
+    get "/history/weeks?from=#{monday_back(20)}&to=#{monday_back(1)}",
+        headers: auth(users(:three)), as: :json
+
+    assert_includes JSON.parse(response.body)["weeks"].map { |w| w["week_start"] }, outside.iso8601
   end
 end

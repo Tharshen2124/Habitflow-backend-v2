@@ -1,6 +1,6 @@
 require "test_helper"
 
-# User#premium? -- the predicate the feature limits will read once they are built.
+# User#premium? -- the predicate every feature limit reads (see PremiumGated).
 class UserSubscriptionTest < ActiveSupport::TestCase
   setup { @user = users(:subscriber) }
 

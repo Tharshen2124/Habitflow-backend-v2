@@ -100,3 +100,44 @@ Three rules hold the design together:
 cancelling sets `cancel_at_period_end` and leaves the status `"active"` until the period ends, so one
 missed webhook would otherwise leave a lapsed account premium forever. It is deliberately **not** a
 JWT claim — that token lives seven days in a cookie and a plan can lapse in minutes.
+
+### The paid tier
+
+`PremiumGated` is the whole of it: `require_premium!` for a feature withheld outright, and
+`FREE_HISTORY_WEEKS` / `free_history_floor` for the one withheld in part. Four things read it.
+
+| Feature | Where | Free tier gets |
+| --- | --- | --- |
+| AI weekly summary | `WeeklySummariesController#create` | 402, before the week is resolved and long before Gemini is called |
+| Analytics | `AnalyticsController#show` | 402 |
+| History | `HistoryController#show` / `#weeks` | The 3 most recent finished weeks; `#weeks` clamps its range, `#show` answers 402 |
+| Auto-sync to Google | `CalendarSyncable#sync_calendar_later` | Nothing — but **Sync now** still works |
+
+Three things about it are load-bearing:
+
+- **402, not 403.** The one 403 in this app (`subscriptions#confirm`) means a session belonging to
+  somebody else. A status nothing else answers is what lets `next-app` render a refusal as an
+  upgrade offer rather than a red sentence — which is why `lib/api.ts` throws an `ApiError` carrying
+  the status instead of a bare `Error`.
+- **Auto-sync is gated at the one enqueue site**, not on the nine actions that reach it, and
+  `CalendarSyncJob` re-checks at run time because a job can outlive the subscription that enqueued
+  it. `calendar_sync_enabled` is left as the user set it — it is a preference, not a grant, so
+  upgrading restores automatic sync without anyone re-ticking a switch. Pushing **by hand** stays
+  free: `calendar#sync` runs inline and never comes through `CalendarSyncable`.
+- **`free_history_floor` is the one place the server derives "the current week"**, which it
+  otherwise refuses to do. A paywall cannot take its boundary from the client: `from`/`to` arrive in
+  the request, and an account naming its own cut-off could walk backwards three weeks at a time
+  through all of its history. It uses the `Date.current - 1` backstop
+  `EveningReflectionsController#week_has_closed?` already uses, with the slack running in the
+  user's favour.
+
+`premium?` is not a JWT claim and there is no `GET /me`, so the client learns its tier from the
+response each gated page **already waits for** — a top-level `premium` key on
+`evening_reflections#index`, on every `calendar` response, and on `history#weeks`. That costs no
+extra request and, more to the point, cannot draw a control unlocked and then take it back.
+`/analytics` is the exception: its only request is the one being refused, so it reads the 402 itself.
+
+`users(:calendar)` is premium in the fixtures, because every auto-sync assertion would otherwise be
+asserting a job that is now correctly never enqueued. `test_helper.rb`'s `premium!` puts an account
+on the paid tier for the suites that are about what happens *behind* a gate; `db/seeds.rb` seeds one
+local account for the Playwright test that needs a real paid session against a real backend.

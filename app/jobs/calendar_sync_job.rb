@@ -18,9 +18,11 @@ class CalendarSyncJob < ApplicationJob
 
   def perform(user_id, week_start, time_zone)
     user = User.find_by(user_id: user_id)
-    # Re-checked rather than trusted from enqueue time: the switch can be turned off, or the grant
-    # revoked, between a plan being saved and the job running.
-    return unless user&.calendar_connected? && user.calendar_sync_enabled?
+    # Re-checked rather than trusted from enqueue time: the switch can be turned off, the grant
+    # revoked, or the subscription lapse between a plan being saved and the job running. The run is
+    # what actually writes to Google, so it is the run that has to be entitled to.
+    return unless user&.premium?
+    return unless user.calendar_connected? && user.calendar_sync_enabled?
 
     SyncWeekToCalendar.call(user: user, week_start: Date.iso8601(week_start), time_zone: time_zone)
   end

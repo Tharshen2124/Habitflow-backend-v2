@@ -4,6 +4,10 @@ class WeeklySummariesControllerTest < ActionDispatch::IntegrationTest
   setup do
     @user = users(:one)
     @plan = weekly_plans(:one)
+    # The summary is a paid feature. Everything below is about what happens *behind* that gate --
+    # the preconditions, the upstream failures, the write-once rule -- so both accounts are put on
+    # the paid tier here and the gate itself is asserted on its own, at the end of the file.
+    premium!(@user, users(:two))
   end
 
   def auth(user = @user)
@@ -161,5 +165,39 @@ class WeeklySummariesControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :unprocessable_entity
+  end
+
+  # --- the premium gate ------------------------------------------------------------------------
+
+  test "a free account is refused, and Gemini is never called" do
+    @user.update!(subscription_status: nil, subscription_period_end: nil)
+    write_whole_week
+
+    assert_no_difference "WeeklySummary.count" do
+      stubbing(GeminiSummaryClient, :summarise, refusing_to_call) { generate }
+    end
+
+    assert_response :payment_required
+  end
+
+  # The gate is declared before find_weekly_plan, so it answers before the week is even looked up.
+  # Which means a free account cannot use the shape of the refusal to learn anything about the week.
+  test "a free account is refused before the week is resolved" do
+    @user.update!(subscription_status: nil, subscription_period_end: nil)
+
+    generate(week_start: "2026-09-07")
+
+    assert_response :payment_required
+  end
+
+  # Cancelling leaves the status "active" until the period runs out, so the period is half the
+  # question -- and a lapsed account must lose the feature, not keep it until a webhook says so.
+  test "an account whose paid period has run out is refused" do
+    @user.update!(subscription_status: "active", subscription_period_end: 1.day.ago)
+    write_whole_week
+
+    stubbing(GeminiSummaryClient, :summarise, refusing_to_call) { generate }
+
+    assert_response :payment_required
   end
 end

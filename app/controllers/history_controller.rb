@@ -9,6 +9,7 @@
 # exactly what a past week most needs to keep.
 class HistoryController < ApplicationController
   include Authenticatable
+  include PremiumGated
   include WeekScoped
 
   # A read, so `find_weekly_plan` rather than `set_weekly_plan`: looking at a week must never file
@@ -21,6 +22,7 @@ class HistoryController < ApplicationController
   # committed to, and its schedule. A week the user never planned answers `null` -- normal, not an
   # error, the same way weekly_plans#show does.
   def show
+    return render_beyond_free_history if beyond_free_history?(week_start)
     return render json: { week: nil } if @weekly_plan.nil?
 
     render json: { week: week_json(@weekly_plan) }
@@ -34,11 +36,27 @@ class HistoryController < ApplicationController
     return if range.nil?
 
     from, to = range
+    premium = current_user.premium?
+    # Clamped rather than refused: the strip asks for a window, and a free account's window simply
+    # starts later than it asked. A window entirely behind the floor is empty, not an error.
+    from = [ from, free_history_floor ].max unless premium
 
-    render json: { weeks: week_summaries(from, to) }
+    render json: { weeks: from > to ? [] : week_summaries(from, to), premium: premium }
   end
 
   private
+
+  # A week the free tier cannot reach is refused outright rather than answered `{ week: nil }`.
+  # That answer already means something specific here -- "you never planned this week" -- and
+  # reusing it would tell a user their own past was empty.
+  def beyond_free_history?(monday)
+    monday.present? && !current_user.premium? && monday < free_history_floor
+  end
+
+  def render_beyond_free_history
+    render json: { errors: [ "Free accounts can look back #{PremiumGated::FREE_HISTORY_WEEKS} weeks" ] },
+           status: :payment_required
+  end
 
   def week_summaries(from, to)
     plans = current_user.weekly_plans.where(start_date: from..to).order(start_date: :desc)

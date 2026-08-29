@@ -1,6 +1,11 @@
 class WeeklySummariesController < ApplicationController
   include Authenticatable
+  include PremiumGated
   include WeekScoped
+
+  # Declared before find_weekly_plan so the refusal costs nothing: a free account is turned away
+  # before the week is even looked up, let alone before Gemini is called.
+  before_action :require_premium!, only: [ :create ]
 
   # A read, for the same reason EveningReflectionsController's is: summarising a week you never
   # planned should be refused, not silently turned into planning it.

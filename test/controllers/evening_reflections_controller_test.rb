@@ -180,4 +180,29 @@ class EveningReflectionsControllerTest < ActionDispatch::IntegrationTest
     get "/evening-reflections/weeks?from=2020-01-06&to=#{FIXTURE_WEEK_START}", headers: auth, as: :json
     assert_response :unprocessable_entity
   end
+
+  # --- the summary's tier -----------------------------------------------------------------------
+
+  # The summary button has to know whether it is locked before it is pressed, and this is the
+  # response the page already waits for -- so the answer arrives with the reflections rather than
+  # costing a second request, and cannot flash an unlocked button it then takes back.
+  test "the week reports which tier it was read for" do
+    get "/weekly-plans/evening-reflections?week_start=#{FIXTURE_WEEK_START}",
+        headers: auth(users(:one)), as: :json
+    assert_equal false, JSON.parse(response.body)["premium"]
+
+    premium!(users(:one))
+    get "/weekly-plans/evening-reflections?week_start=#{FIXTURE_WEEK_START}",
+        headers: auth(users(:one)), as: :json
+    assert_equal true, JSON.parse(response.body)["premium"]
+  end
+
+  test "a week that was never planned still reports the tier" do
+    get "/weekly-plans/evening-reflections?week_start=2026-09-07",
+        headers: auth(users(:one)), as: :json
+
+    assert_response :success
+    assert_equal false, JSON.parse(response.body)["planned"]
+    assert_equal false, JSON.parse(response.body)["premium"]
+  end
 end

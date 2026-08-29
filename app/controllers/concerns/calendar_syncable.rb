@@ -1,8 +1,14 @@
 # The auto-sync hook. Any controller action that changes what an event would say calls
 # `sync_calendar_later` after its write succeeds.
 #
-# It is a no-op unless the user has connected a calendar and left the switch on, so the cost to a
-# user who has never touched the feature is one boolean.
+# It is a no-op unless the user is on the paid tier, has connected a calendar and left the switch
+# on, so the cost to a user who has never touched the feature is one boolean.
+#
+# The premium check is here rather than on each of the nine actions that call this, because this is
+# the only place in the app that enqueues a CalendarSyncJob -- gating it once gates every write that
+# could reach Google. Pushing a schedule *manually* stays free: calendar#sync runs inline and
+# deliberately does not come through here, which is the whole distinction the pricing page draws
+# between "Push your schedule to Google Calendar" and "Sync calendar edits automatically".
 module CalendarSyncable
   extend ActiveSupport::Concern
 
@@ -13,6 +19,7 @@ module CalendarSyncable
   # every task under it, in this week and in next week's plan if one exists. Weeks already gone are
   # left alone -- they are read as they were recorded, the line /history and /analytics also draw.
   def sync_calendar_later
+    return unless current_user.premium?
     return unless current_user.calendar_connected? && current_user.calendar_sync_enabled?
 
     zone = current_time_zone

@@ -5,6 +5,10 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
   # Wide enough to reach past_week and short enough to stay inside the 52-week cap.
   RANGE = "from=2026-07-06&to=2026-08-17".freeze
 
+  # The page is a paid feature, and every test below is about the figures it returns rather than
+  # about who may see them. The gate itself is asserted on its own, at the end of the file.
+  setup { premium!(users(:one), users(:three), users(:four)) }
+
   def token_for(user)
     JsonWebToken.encode(user.to_token_payload)
   end
@@ -156,5 +160,46 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 3, week["roles"].sum { |r| r["total"] } + week["dimensions"].sum { |d| d["total"] },
                  "the week's four tasks less the fixed appointment"
     assert_empty week["daily_priorities"].select { |d| d["day_of_week"] == tasks(:past_fixed).day_of_week }
+  end
+
+  # --- the premium gate ------------------------------------------------------------------------
+
+  test "a free account is refused the whole page" do
+    users(:three).update!(subscription_status: nil, subscription_period_end: nil)
+
+    get "/analytics?#{RANGE}", headers: auth(users(:three)), as: :json
+
+    assert_response :payment_required
+    assert_equal [ "This is a Premium feature" ], JSON.parse(response.body)["errors"]
+  end
+
+  # 402 rather than 403, so the client can tell "you have not paid for this" from the one 403 this
+  # app already answers, which means something else entirely -- a session belonging to someone else.
+  test "the refusal is distinguishable from an unauthorized one" do
+    users(:three).update!(subscription_status: nil, subscription_period_end: nil)
+
+    get "/analytics?#{RANGE}", headers: auth(users(:three)), as: :json
+    assert_equal 402, response.status
+
+    get "/analytics?#{RANGE}", as: :json
+    assert_equal 401, response.status
+  end
+
+  test "an account whose paid period has run out is refused" do
+    users(:three).update!(subscription_status: "active", subscription_period_end: 1.day.ago)
+
+    get "/analytics?#{RANGE}", headers: auth(users(:three)), as: :json
+
+    assert_response :payment_required
+  end
+
+  # The gate is declared before the range is parsed, so a free account is turned away without the
+  # endpoint saying anything about what it would have found.
+  test "a free account is refused even with a range it could never read" do
+    users(:three).update!(subscription_status: nil, subscription_period_end: nil)
+
+    get "/analytics?from=2026-08-17&to=2026-07-06", headers: auth(users(:three)), as: :json
+
+    assert_response :payment_required
   end
 end

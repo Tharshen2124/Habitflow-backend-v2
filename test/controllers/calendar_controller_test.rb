@@ -195,6 +195,48 @@ class CalendarControllerTest < ActionDispatch::IntegrationTest
 
   # The switch is a preference, not part of the grant: reconnecting should not make the user
   # re-tick something they never touched.
+  # --- the paid half ---------------------------------------------------------------------------
+
+  # Only automatic sync is paid for. Pressing Sync now is the free tier's whole way of getting a
+  # schedule onto Google, so it must keep working -- it runs inline here and never goes through
+  # CalendarSyncable, which is exactly what that split is built on.
+  test "a free account can still sync by hand" do
+    users(:calendar).update!(subscription_status: nil, subscription_period_end: nil)
+
+    stubbing(SyncWeekToCalendar, :call, SyncWeekToCalendar::Result.new(written: 4, deleted: 1, error: nil)) do
+      post "/calendar/sync", params: { week_start: FIXTURE_WEEK_START }, headers: auth(users(:calendar)), as: :json
+    end
+
+    assert_response :success
+    assert_equal 4, body["written"]
+  end
+
+  test "a free account can still connect, choose categories and disconnect" do
+    users(:calendar).update!(subscription_status: nil, subscription_period_end: nil)
+
+    patch "/calendar/settings",
+          params: { week_start: FIXTURE_WEEK_START, sync_enabled: true,
+                    export_preference: { fixed_appointments: false } },
+          headers: auth(users(:calendar)), as: :json
+
+    assert_response :success
+    assert_equal false, body["calendar"]["export_preference"]["fixed_appointments"]
+  end
+
+  # The switch reports what the user set even while nothing acts on it. The client reads `premium`
+  # beside it and renders the switch off and locked; storing a lie here would mean an upgrade
+  # silently failed to bring automatic sync back.
+  test "the settings say which tier they were read for, and keep the stored switch either way" do
+    get "/calendar", headers: auth(users(:calendar)), as: :json
+    assert_equal true, body["premium"]
+
+    users(:calendar).update!(subscription_status: nil, subscription_period_end: nil)
+    get "/calendar", headers: auth(users(:calendar)), as: :json
+
+    assert_equal false, body["premium"]
+    assert_equal true, body["calendar"]["sync_enabled"]
+  end
+
   test "disconnecting leaves the sync preference alone" do
     users(:calendar).update!(calendar_sync_enabled: false)
 

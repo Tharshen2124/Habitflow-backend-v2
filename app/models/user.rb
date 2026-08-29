@@ -65,8 +65,10 @@ class User < ApplicationRecord
   # Premium means "Stripe says this subscription is live, and the period it paid for has not run
   # out". The second half is not redundant with the first: cancelling sets cancel_at_period_end and
   # leaves the status "active" until the period actually ends, so a single missed webhook on that
-  # day would otherwise leave a lapsed account premium forever. Nothing gates on this yet -- it is
-  # the predicate the feature limits will read when they are built.
+  # day would otherwise leave a lapsed account premium forever.
+  #
+  # Four things read this, all through PremiumGated or CalendarSyncable: the AI weekly summary,
+  # /analytics, how far /history looks back, and whether a write auto-syncs to Google Calendar.
   def premium?
     PREMIUM_STATUSES.include?(subscription_status) &&
       (subscription_period_end.nil? || subscription_period_end > Time.current)

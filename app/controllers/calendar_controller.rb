@@ -15,7 +15,7 @@ class CalendarController < ApplicationController
   MAX_WEEKS = 8
 
   def show
-    render json: { calendar: calendar_json }
+    render json: { calendar: calendar_json, premium: current_user.premium? }
   end
 
   # Returns the consent URL rather than redirecting to it. A redirect would have to be followed by
@@ -70,7 +70,7 @@ class CalendarController < ApplicationController
     # Unticking a category has to take its events off the calendar, not merely stop adding them --
     # which is a whole-week reconcile, so it goes through the ordinary auto-sync path.
     sync_calendar_later
-    render json: { calendar: calendar_json }
+    render json: { calendar: calendar_json, premium: current_user.premium? }
   rescue ActiveRecord::RecordInvalid => e
     render json: { errors: e.record.errors.full_messages }, status: :unprocessable_entity
   end
@@ -96,7 +96,8 @@ class CalendarController < ApplicationController
       weeks: results.size,
       written: results.sum(&:written),
       deleted: results.sum(&:deleted),
-      calendar: calendar_json
+      calendar: calendar_json,
+      premium: current_user.premium?
     }
   end
 
@@ -110,7 +111,7 @@ class CalendarController < ApplicationController
     end
 
     current_user.disconnect_calendar!
-    render json: { calendar: calendar_json }
+    render json: { calendar: calendar_json, premium: current_user.premium? }
   end
 
   private
@@ -157,6 +158,11 @@ class CalendarController < ApplicationController
     redirect_to "#{ENV.fetch('FRONTEND_ORIGIN')}/settings##{fragment}", allow_other_host: true
   end
 
+  # `sync_enabled` is reported as stored even for a free account, whose automatic sync does not
+  # run. The column stays a preference the user set, exactly as disconnect_calendar! leaves it
+  # alone -- so upgrading restores the switch rather than asking them to find it again. The client
+  # reads `premium` beside this and renders the switch off and locked; the server is what actually
+  # withholds the sync, in CalendarSyncable.
   def calendar_json
     {
       connected: current_user.calendar_connected?,

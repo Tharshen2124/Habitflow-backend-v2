@@ -48,6 +48,18 @@ module ActiveSupport
       [ calls, ->(*args, **kwargs) { calls << args; returning.respond_to?(:call) ? returning.call(*args, **kwargs) : returning } ]
     end
 
+    # Puts an account on the paid tier without going anywhere near Stripe.
+    #
+    # The fixtures deliberately keep subscription columns on users(:subscriber) alone, so that the
+    # tests asserting an account has *no* customer have a user who could never have one. A suite
+    # about what happens **behind** a premium gate therefore says so here, rather than borrowing
+    # that user and the Stripe ids that come with them.
+    def premium!(*users)
+      users.each do |user|
+        user.update!(subscription_status: "active", subscription_period_end: 20.days.from_now)
+      end
+    end
+
     # Add more helper methods to be used by all tests here...
   end
 end

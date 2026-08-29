@@ -47,6 +47,11 @@ calendar:
   calendar_access_token: fixture-calendar-access-token
   calendar_refresh_token: fixture-calendar-refresh-token
   calendar_token_expires_at: <%= 1.hour.from_now.to_fs(:db) %>
+  # Premium, because automatic sync is a paid feature: without this every "the write syncs" test
+  # here would be asserting a job that CalendarSyncable now declines to enqueue. The tests for the
+  # free side clear these two columns inline, the same way they already flip calendar_sync_enabled.
+  subscription_status: active
+  subscription_period_end: <%= 20.days.from_now.to_fs(:db) %>
 
 # The only user with a Stripe customer behind them, kept apart for the same reason users(:calendar)
 # is: every other user's tests would otherwise have a subscription to reason about, and the tests

@@ -43,6 +43,33 @@ class CalendarSyncHooksTest < ActionDispatch::IntegrationTest
     assert_response :created
   end
 
+  # Automatic sync is the paid half of the calendar feature. Connecting, pushing by hand and
+  # choosing what exports are all free -- only the part that fires on every write is not.
+  test "a free account never reaches the automatic path" do
+    users(:calendar).update!(subscription_status: nil, subscription_period_end: nil)
+
+    assert_no_enqueued_jobs(only: CalendarSyncJob) { post_tasks(users(:calendar)) }
+    assert_response :created
+  end
+
+  test "an account whose paid period has run out never reaches it either" do
+    users(:calendar).update!(subscription_period_end: 1.day.ago)
+
+    assert_no_enqueued_jobs(only: CalendarSyncJob) { post_tasks(users(:calendar)) }
+    assert_response :created
+  end
+
+  # The switch is left as the user set it. It is a preference, not a grant -- the same reason
+  # User#disconnect_calendar! leaves it alone -- so upgrading restores automatic sync without
+  # asking anyone to go and find a switch they never touched.
+  test "being free does not clear the switch the user set" do
+    users(:calendar).update!(subscription_status: nil, subscription_period_end: nil)
+
+    post_tasks(users(:calendar))
+
+    assert_equal true, users(:calendar).reload.calendar_sync_enabled
+  end
+
   # A guessed zone silently files a whole week at the wrong hour, which is worse than not filing it.
   test "a request with no usable time zone skips the sync rather than guessing" do
     assert_no_enqueued_jobs(only: CalendarSyncJob) do

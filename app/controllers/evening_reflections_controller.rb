@@ -12,12 +12,18 @@ class EveningReflectionsController < ApplicationController
   # One week in full: its reflections and its summary, in a single round trip. An unplanned week is
   # a normal answer, as it is for weekly_plans#show.
   def index
-    return render json: { planned: false, reflections: [], summary: nil } if @weekly_plan.nil?
+    # `premium` rides along on both branches rather than costing the page a second request. The
+    # summary button has to know whether it is locked *before* it is pressed, and an answer that
+    # arrives with the reflections cannot flash an unlocked button it then takes back.
+    if @weekly_plan.nil?
+      return render json: { planned: false, reflections: [], summary: nil, premium: current_user.premium? }
+    end
 
     render json: {
       planned: true,
       reflections: @weekly_plan.evening_reflections.order(:day_of_week).map { |r| reflection_json(r) },
-      summary: @weekly_plan.weekly_summary && summary_json(@weekly_plan.weekly_summary)
+      summary: @weekly_plan.weekly_summary && summary_json(@weekly_plan.weekly_summary),
+      premium: current_user.premium?
     }
   end
 

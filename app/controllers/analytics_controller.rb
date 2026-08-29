@@ -11,7 +11,12 @@
 # compute and a client that owns it can re-slice a range without another round trip.
 class AnalyticsController < ApplicationController
   include Authenticatable
+  include PremiumGated
   include WeekScoped
+
+  # The whole page is paid for, so there is no partial answer to give: the client reads the 402
+  # itself and renders the upgrade offer in place of the four cards.
+  before_action :require_premium!, only: [ :show ]
 
   def show
     range = parse_week_range
