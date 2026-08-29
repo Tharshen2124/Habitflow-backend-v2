@@ -8,6 +8,10 @@ class User < ApplicationRecord
   has_many :weekly_plans, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
   has_many :roles, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
   has_many :sharpen_the_saw_activities, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
+  # Position is free, unlike everything above it: payments reference only the user and nothing
+  # references payments, so no other association has to be gone before or after this one. Destroyed
+  # with the account because the foreign key would otherwise refuse to let it go.
+  has_many :payments, foreign_key: "user_id", primary_key: "user_id", dependent: :destroy
 
   has_secure_password validations: false
 
@@ -54,6 +58,23 @@ class User < ApplicationRecord
       calendar_synced_at: nil
     )
   end
+
+  # Stripe's own statuses that mean the subscription is live and should be treated as paid for.
+  PREMIUM_STATUSES = %w[active trialing].freeze
+
+  # Premium means "Stripe says this subscription is live, and the period it paid for has not run
+  # out". The second half is not redundant with the first: cancelling sets cancel_at_period_end and
+  # leaves the status "active" until the period actually ends, so a single missed webhook on that
+  # day would otherwise leave a lapsed account premium forever. Nothing gates on this yet -- it is
+  # the predicate the feature limits will read when they are built.
+  def premium?
+    PREMIUM_STATUSES.include?(subscription_status) &&
+      (subscription_period_end.nil? || subscription_period_end > Time.current)
+  end
+
+  # Deliberately NOT part of to_token_payload below. That token lives seven days in a cookie, and a
+  # subscription can lapse in minutes; a claim that cannot be revoked would say "premium" long after
+  # Stripe stopped agreeing. is_onboarded is safe there only because onboarding is one-way.
 
   # Non-sensitive claims embedded in the JWT so the frontend can decode them client-side.
   def to_token_payload

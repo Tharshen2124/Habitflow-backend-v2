@@ -69,3 +69,34 @@ Four consequences worth knowing before touching a week-scoped endpoint:
   `is_completed` on every row, and `/history` and `/analytics` resolve a week through
   `task -> goal -> role`. A submitted id is updated in place; an id-less task is created; a task the
   client stops sending is destroyed only if unfinished, which is `ArchiveGoal`'s rule.
+
+### Stripe
+
+`SubscriptionsController` is the paid tier, and the only controller with a second unauthenticated
+action: `skip_before_action :authenticate_request!, only: [ :webhook ]`, where a signature over
+`request.raw_post` stands in for the bearer token. **The raw body, never `params`** — the signature is
+over the exact bytes Stripe sent, and a re-serialised hash is not those bytes.
+
+`stripe` is the one HTTP client gem here, against the rule `GeminiSummaryClient` and
+`GoogleCalendarClient` both state in comments. The Gemfile says why: those are outbound calls where a
+bug means a failed sync, whereas verifying an inbound signature is a security boundary where one
+silently hands out free subscriptions. Everything goes through `StripeClient`, which is the only file
+that names the gem and the seam the tests replace with `stubbing` — **do not add webmock or vcr**,
+which this suite has now declined three times.
+
+Three rules hold the design together:
+
+- **The Customer is created before checkout starts**, not on `checkout.session.completed`. That is
+  what makes the arrival order of that event and `invoice.paid` stop mattering — `stripe_customer_id`
+  is already set, so an invoice landing first still resolves to a user.
+- **Everything is safe to run twice.** Stripe delivers at least once and replays anything that does
+  not answer 2xx, so an event type with no handler must still return 200. `ApplyStripeSubscription`
+  copies every field off the event rather than deriving it, and `payments.stripe_invoice_id` is unique.
+- **`subscription_period_end` comes from the subscription's *item*.** `current_period_end` was moved
+  off `Subscription` and onto `SubscriptionItem` in the 2025 API versions, and the gem is pinned well
+  past that. A deleted subscription can arrive carrying no items at all.
+
+`User#premium?` checks the period as well as the status, and the second half is not redundant:
+cancelling sets `cancel_at_period_end` and leaves the status `"active"` until the period ends, so one
+missed webhook would otherwise leave a lapsed account premium forever. It is deliberately **not** a
+JWT claim — that token lives seven days in a cookie and a plan can lapse in minutes.

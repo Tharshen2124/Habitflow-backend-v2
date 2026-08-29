@@ -321,6 +321,9 @@ GEM
       net-sftp (>= 2.1.2)
       net-ssh (>= 2.8.0)
       ostruct
+    stripe (19.6.0)
+      bigdecimal
+      logger
     thor (1.5.0)
     thruster (0.1.25)
     thruster (0.1.25-aarch64-linux)
@@ -370,6 +373,7 @@ DEPENDENCIES
   solid_cable
   solid_cache
   solid_queue
+  stripe
   thruster
   tzinfo-data
 
@@ -490,6 +494,7 @@ CHECKSUMS
   solid_cache (1.0.10) sha256=bc05a2fb3ac78a6f43cbb5946679cf9db67dd30d22939ededc385cb93e120d41
   solid_queue (1.6.0) sha256=b5fc3bb34162e09d8f960df6400d0f9304dc80fe66c2cfface31c32b228de6a1
   sshkit (1.25.1) sha256=be3f10b9d6eb0b44d5eaba3f7cbe41bc6bb894bce4339688ac20124391455b78
+  stripe (19.6.0) sha256=bbd4668cd3cddc05a292ac5d9a99ca55f1925b2002cfa4f3b3c94a599f548ebf
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
   thruster (0.1.25) sha256=d97d704e91fa37d5858bc238dea6186f7310b633abfeea9f2ba814f252203716
   thruster (0.1.25-aarch64-linux) sha256=495265b11fc3c3596ae0d70ed902b60db82dafb2a5b47a2c527d3176ee3cf311

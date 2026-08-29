@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_25_090000) do
+ActiveRecord::Schema[8.1].define(version: 2026_08_28_100100) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -52,6 +52,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_090000) do
     t.index ["role_id"], name: "index_goals_on_role_id"
     t.index ["weekly_plan_id", "deleted_at"], name: "index_goals_on_weekly_plan_id_and_deleted_at"
     t.index ["weekly_plan_id"], name: "index_goals_on_weekly_plan_id"
+  end
+
+  create_table "payments", primary_key: "payment_id", force: :cascade do |t|
+    t.integer "amount_cents", null: false
+    t.datetime "created_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.string "currency", null: false
+    t.datetime "paid_at"
+    t.string "status", null: false
+    t.string "stripe_invoice_id", null: false
+    t.bigint "user_id", null: false
+    t.index ["stripe_invoice_id"], name: "index_payments_on_stripe_invoice_id", unique: true
+    t.index ["user_id"], name: "index_payments_on_user_id"
   end
 
   create_table "roles", primary_key: "role_id", force: :cascade do |t|
@@ -117,9 +129,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_090000) do
     t.string "google_uid"
     t.boolean "is_onboarded", default: false, null: false
     t.string "password_digest"
+    t.string "stripe_customer_id"
+    t.string "stripe_subscription_id"
+    t.datetime "subscription_period_end"
+    t.string "subscription_status"
     t.string "username", null: false
     t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
     t.index ["google_uid"], name: "index_users_on_google_uid", unique: true
+    t.index ["stripe_customer_id"], name: "index_users_on_stripe_customer_id", unique: true
+    t.index ["stripe_subscription_id"], name: "index_users_on_stripe_subscription_id", unique: true
     t.index ["username"], name: "index_users_on_username", unique: true
   end
 
@@ -155,6 +173,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_25_090000) do
   add_foreign_key "goal_carryovers", "goals", column: "source_goal_id", primary_key: "goal_id"
   add_foreign_key "goals", "roles", primary_key: "role_id"
   add_foreign_key "goals", "weekly_plans", primary_key: "weekly_plan_id"
+  add_foreign_key "payments", "users", primary_key: "user_id"
   add_foreign_key "roles", "users", primary_key: "user_id"
   add_foreign_key "sharpen_the_saw_activities", "users", primary_key: "user_id"
   add_foreign_key "tasks", "goals", primary_key: "goal_id"

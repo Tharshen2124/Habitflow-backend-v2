@@ -85,6 +85,18 @@ Rails.application.routes.draw do
   # as recorded, the same way /history does, and for the same reason -- it resolves a week through
   # `task -> goal -> role`, so archived roles and dropped goals still have to resolve.
   get "analytics" => "analytics#show"
+  # The paid tier. Checkout and the Billing Portal are both pages Stripe hosts, so these two return
+  # a URL for the browser to follow rather than redirecting -- a redirect could not carry the bearer
+  # token that says whose subscription it is, exactly as calendar/connect could not.
+  # "subscription/webhook" is the only unauthenticated one: it arrives server-to-server from Stripe,
+  # and a signature over the raw body stands in for the token. "subscription/confirm" is the same
+  # news arriving by the other road, so that a user back from checkout is not shown "Free" while the
+  # webhook is still in flight.
+  get  "subscription" => "subscriptions#show"
+  post "subscription/checkout" => "subscriptions#checkout"
+  post "subscription/portal" => "subscriptions#portal"
+  post "subscription/confirm" => "subscriptions#confirm"
+  post "subscription/webhook" => "subscriptions#webhook"
   # Defines the root path route ("/")
   # root "posts#index"
 end

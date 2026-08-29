@@ -38,6 +38,16 @@ gem "image_processing", "~> 1.2"
 # Use Rack CORS for handling Cross-Origin Resource Sharing (CORS), making cross-origin Ajax possible
 gem "rack-cors"
 
+# Stripe Checkout, the Billing Portal, and webhook signature verification.
+#
+# The only HTTP client gem here, and a deliberate exception to the rule GeminiSummaryClient and
+# GoogleCalendarClient both state -- that a plain Net::HTTP class is enough. Those are outbound
+# calls where a bug means a failed sync. This one verifies an *inbound* signature, which is a
+# security boundary: comparing in non-constant time, skipping the timestamp tolerance, or hashing
+# the parsed body instead of the raw one each silently hands an attacker a free subscription.
+# That is worth someone else's maintained implementation rather than ours.
+gem "stripe"
+
 group :development, :test do
   # Loads environment variables from .env.local into ENV
   gem "dotenv-rails"

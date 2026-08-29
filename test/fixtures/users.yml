@@ -47,3 +47,17 @@ calendar:
   calendar_access_token: fixture-calendar-access-token
   calendar_refresh_token: fixture-calendar-refresh-token
   calendar_token_expires_at: <%= 1.hour.from_now.to_fs(:db) %>
+
+# The only user with a Stripe customer behind them, kept apart for the same reason users(:calendar)
+# is: every other user's tests would otherwise have a subscription to reason about, and the tests
+# that assert an account has *no* customer need a user who could never have one.
+subscriber:
+  username: fixture_subscriber
+  email: fixture-subscriber@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  is_onboarded: true
+  email_notifications_enabled: false
+  stripe_customer_id: cus_fixture_subscriber
+  stripe_subscription_id: sub_fixture_subscriber
+  subscription_status: active
+  subscription_period_end: <%= 20.days.from_now.to_fs(:db) %>
