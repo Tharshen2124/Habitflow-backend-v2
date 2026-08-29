@@ -32,3 +32,23 @@ if Rails.env.local?
   user.save!
   puts "Seeded premium e2e account: #{user.email}"
 end
+
+# An administrator for the admin dashboard.
+#
+# Same shape as the account above and for the same reason: nothing at runtime grants this flag --
+# there is deliberately no "promote" endpoint, since the only account that could call one is already
+# an admin -- so a local database has no other way to get one. `db/seeds.rb` is not run in
+# production, where the flag is set by hand:
+#
+#   User.find_by(email: "you@example.com").update!(is_admin: true)
+if Rails.env.local?
+  admin = User.find_or_initialize_by(email: "admin@example.com")
+  admin.assign_attributes(
+    username: "admin",
+    password: "password123",
+    is_onboarded: true,
+    is_admin: true
+  )
+  admin.save!
+  puts "Seeded admin account: #{admin.email}"
+end

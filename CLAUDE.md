@@ -96,6 +96,20 @@ Three rules hold the design together:
   off `Subscription` and onto `SubscriptionItem` in the 2025 API versions, and the gem is pinned well
   past that. A deleted subscription can arrive carrying no items at all.
 
+**`payments` is filled by the webhook and by nothing else** — which is why a development machine
+that never ran `stripe listen` shows premium accounts and zero revenue. `subscriptions#confirm`
+writes the subscription half of the truth from the browser redirect and deliberately does not write
+a payment: a payment is a fact Stripe reports, not something to infer from a redirect. So the money
+half simply never arrives if the webhook road is not connected.
+
+`BackfillStripePayments` (`rails stripe:backfill_payments`) is the catch-up. It lists each
+customer's invoices through `StripeClient.list_invoices` — the one call here that *asks* about
+invoices rather than being told — and hands each to the same `RecordStripePayment` the webhook
+calls, so a row it writes is indistinguishable from one the webhook would have. Re-running is a
+no-op. It records only `paid` and `uncollectible`: `draft` and `open` have not resolved and `void`
+was cancelled, the same line the webhook draws by listening for `invoice.paid` and
+`invoice.payment_failed` alone.
+
 `User#premium?` checks the period as well as the status, and the second half is not redundant:
 cancelling sets `cancel_at_period_end` and leaves the status `"active"` until the period ends, so one
 missed webhook would otherwise leave a lapsed account premium forever. It is deliberately **not** a
@@ -115,10 +129,12 @@ JWT claim — that token lives seven days in a cookie and a plan can lapse in mi
 
 Three things about it are load-bearing:
 
-- **402, not 403.** The one 403 in this app (`subscriptions#confirm`) means a session belonging to
-  somebody else. A status nothing else answers is what lets `next-app` render a refusal as an
-  upgrade offer rather than a red sentence — which is why `lib/api.ts` throws an `ApiError` carrying
-  the status instead of a bare `Error`.
+- **402, not 403.** The two 403s in this app mean the other thing: `subscriptions#confirm` refuses
+  a checkout session belonging to somebody else, and `AdminController` refuses an account that is
+  not an administrator. A status nothing but the paid tier answers is what lets `next-app` render a
+  refusal as an upgrade offer rather than a red sentence — which is why `lib/api.ts` throws an
+  `ApiError` carrying the status instead of a bare `Error`. "You have not paid for this" has an
+  offer to make; "you are not allowed here" does not, and `AdminDenied` deliberately makes none.
 - **Auto-sync is gated at the one enqueue site**, not on the nine actions that reach it, and
   `CalendarSyncJob` re-checks at run time because a job can outlive the subscription that enqueued
   it. `calendar_sync_enabled` is left as the user set it — it is a preference, not a grant, so
@@ -141,3 +157,47 @@ extra request and, more to the point, cannot draw a control unlocked and then ta
 asserting a job that is now correctly never enqueued. `test_helper.rb`'s `premium!` puts an account
 on the paid tier for the suites that are about what happens *behind* a gate; `db/seeds.rb` seeds one
 local account for the Playwright test that needs a real paid session against a real backend.
+
+### The admin dashboard
+
+`AdminController` is the one controller whose reads are **not scoped to `current_user`**. Every
+other controller here is scoped by construction, so a bug in one leaks nothing; this one answers
+"every account" and "every invoice", which is why the guard is a `before_action` on the whole class
+rather than a check inside each action — an action added later is refused by default.
+
+An admin is `users.is_admin`, a column rather than an `admins` table: an admin is an ordinary
+HabitFlow account with one extra permission, so a separate table would have meant a second login
+page, a second token shape and a second authentication concern for the same credentials. It is
+granted by hand (`User.find_by(email: ...).update!(is_admin: true)`) and by **no endpoint** — the
+only account that could call a promote action is already an admin, so an endpoint would be a
+permanent privilege-escalation surface bought for nothing.
+
+`is_admin` **is** a JWT claim, where `premium?` deliberately is not, and the difference is what each
+is used for. The client reads `premium?` to decide whether a control is unlocked, so a stale claim
+hands out a feature someone stopped paying for; it reads `is_admin` only to decide **which page to
+route to** — `/login` sends an admin to `/admin/dashboard` and `next-app/proxy.ts` keeps them there
+— and every `/admin/*` request re-checks the column, so a stale or forged claim buys a page that
+answers 403.
+
+An admin account is **not** a user of the app: it has no roles, goals or weekly plan, and the
+frontend turns it back from every other route. That restriction is currently **client-side only** —
+the user-facing endpoints would still answer an admin's bearer token. Nothing reaches them, because
+nothing asks; if that should be enforced here too, it wants a shared guard on the fifteen
+user-facing controllers rather than a check in each.
+
+Three things about the payloads are load-bearing:
+
+- **Every figure is anchored on a real timestamp** (`created_at`, `paid_at`, `tasks.updated_at`),
+  never on a week boundary, so the rule that the server never derives "the current week" stays
+  intact — `PremiumGated#free_history_floor` is still the only place it is broken. "Active" is
+  therefore "touched a task in 30 days", not "signed in": the token lives seven days, so being
+  signed in says nothing about the app having been opened.
+- **Money is reported one currency at a time.** `payments.currency` is per row, so the currency with
+  the largest paid total is the one the figures and the trend describe, and any other is listed
+  beside it — a total that has added MYR to USD is not a number anyone can act on. The same rule
+  applies per user in `lifetime_spend`.
+- **The lists paginate with plain LIMIT/OFFSET and no gem**, capped at `MAX_PER_PAGE` so a client
+  cannot turn a paginated endpoint back into an unpaginated one, ordered with a primary-key
+  tie-break so two rows created in the same second cannot swap between pages, and clamped to the
+  last page that exists rather than answering an empty table. Search escapes with
+  `sanitize_sql_like`, or a `%` typed into the box would be a wildcard matching every account.

@@ -16,11 +16,14 @@ module PremiumGated
 
   private
 
-  # 402 rather than 403. This is not an ownership failure -- the account is exactly who it says it
-  # is, and the one 403 in this app (subscriptions#confirm) means the opposite thing: a session
-  # belonging to somebody else. Nothing else answers 402, so the client can branch on the status
-  # instead of matching the prose, which is what lets a refusal render as an upgrade offer rather
-  # than as a red sentence.
+  # 402 rather than 403. This is not an authorisation failure -- the account is exactly who it says
+  # it is and is allowed to be here, it simply has not bought this. The two 403s in this app mean
+  # the other thing: subscriptions#confirm refuses a checkout session belonging to somebody else,
+  # and AdminController refuses an account that is not an administrator. Nothing but the paid tier
+  # answers 402, so the client can branch on the status instead of matching the prose, which is
+  # what lets a refusal render as an upgrade offer rather than as a red sentence -- and what keeps
+  # "you have not paid for this", which has an offer to make, apart from "you are not allowed
+  # here", which does not.
   def require_premium!
     return if current_user.premium?
 

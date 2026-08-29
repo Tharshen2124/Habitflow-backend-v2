@@ -97,6 +97,13 @@ Rails.application.routes.draw do
   post "subscription/portal" => "subscriptions#portal"
   post "subscription/confirm" => "subscriptions#confirm"
   post "subscription/webhook" => "subscriptions#webhook"
+  # The admin dashboard. The only reads in this app that are not scoped to the account making them,
+  # which is why AdminController guards the whole class rather than each action -- see the comment
+  # there. Both lists are paginated server-side: "every user" and "every invoice" are the two
+  # collections here that have no natural ceiling.
+  get "admin/overview" => "admin#overview"
+  get "admin/users" => "admin#users"
+  get "admin/payments" => "admin#payments"
   # Defines the root path route ("/")
   # root "posts#index"
 end

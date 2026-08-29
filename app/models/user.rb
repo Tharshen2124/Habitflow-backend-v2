@@ -74,13 +74,31 @@ class User < ApplicationRecord
       (subscription_period_end.nil? || subscription_period_end > Time.current)
   end
 
+  # The same question asked of a whole table rather than of one row, for the admin dashboard's
+  # "how many are paying" figure. It has to agree with #premium? above and cannot share a line of
+  # code with it -- one reads Ruby attributes, the other has to be SQL Postgres can count -- so
+  # admin_controller_test.rb pins the two against each other over the fixtures.
+  scope :premium, -> {
+    where(subscription_status: PREMIUM_STATUSES)
+      .where("subscription_period_end IS NULL OR subscription_period_end > ?", Time.current)
+  }
+
   # Deliberately NOT part of to_token_payload below. That token lives seven days in a cookie, and a
   # subscription can lapse in minutes; a claim that cannot be revoked would say "premium" long after
   # Stripe stopped agreeing. is_onboarded is safe there only because onboarding is one-way.
 
   # Non-sensitive claims embedded in the JWT so the frontend can decode them client-side.
+  #
+  # is_admin rides along despite being revocable, unlike premium?, because of what each claim is
+  # *used for*. The client reads premium? to decide whether a control is unlocked, so a stale claim
+  # hands someone a feature they stopped paying for. It reads is_admin only to decide whether to
+  # draw the Admin link in the sidebar: every admin endpoint re-checks the column on the row the
+  # token resolved to, so the worst a revoked admin's unexpired token buys is a link that answers
+  # 403. And admin is granted by hand and revoked about as often, where a subscription lapses on a
+  # schedule -- so the alternative, a request per page load to ask "am I an admin?", would be paid
+  # by every user in the app to keep one of them's sidebar honest.
   def to_token_payload
-    { user_id: user_id, email: email, username: username, is_onboarded: is_onboarded }
+    { user_id: user_id, email: email, username: username, is_onboarded: is_onboarded, is_admin: is_admin }
   end
 
   # Google is a way *into* an account, never a way to open one -- an account is created only through

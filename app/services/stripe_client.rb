@@ -75,6 +75,15 @@ class StripeClient
       end
     end
 
+    # Every invoice Stripe holds for one customer, paged through in full.
+    #
+    # The only call in this file that *asks* about invoices; everywhere else this app is told about
+    # them, by a webhook. It exists for BackfillStripePayments, which catches an environment up
+    # after the webhook was not being delivered -- see that service for why that happens at all.
+    def list_invoices(customer_id)
+      call { with_key { Stripe::Invoice.list(customer: customer_id, limit: 100).auto_paging_each.to_a } }
+    end
+
     # The security boundary. Verifies the signature over the *raw* body and returns the parsed event
     # only if it holds -- an unsigned or mis-signed request is indistinguishable from an attacker
     # asking to be made premium.

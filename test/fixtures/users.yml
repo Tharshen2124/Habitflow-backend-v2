@@ -66,3 +66,14 @@ subscriber:
   stripe_subscription_id: sub_fixture_subscriber
   subscription_status: active
   subscription_period_end: <%= 20.days.from_now.to_fs(:db) %>
+
+# The only admin. Kept apart from the other users for the same reason users(:calendar) and
+# users(:subscriber) are: admin_controller_test asserts exact counts over the whole users table,
+# and every other suite's user would otherwise be one API call away from reading all of them.
+admin:
+  username: fixture_admin
+  email: fixture-admin@example.com
+  password_digest: <%= BCrypt::Password.create("password123") %>
+  is_onboarded: true
+  email_notifications_enabled: false
+  is_admin: true

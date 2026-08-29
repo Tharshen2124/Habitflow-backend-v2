@@ -1,0 +1,30 @@
+# Every payment belongs to users(:subscriber) -- the only account with a Stripe customer behind it,
+# which is what a real invoice would have arrived naming.
+
+# Two successful charges a month apart, so the monthly revenue trend has more than one bar and
+# `lifetime_spend` has a sum to make rather than a single row to echo.
+subscriber_first:
+  user: subscriber
+  stripe_invoice_id: in_fixture_first
+  amount_cents: 2500
+  currency: myr
+  status: paid
+  paid_at: <%= 40.days.ago.to_fs(:db) %>
+
+subscriber_second:
+  user: subscriber
+  stripe_invoice_id: in_fixture_second
+  amount_cents: 2500
+  currency: myr
+  status: paid
+  paid_at: <%= 5.days.ago.to_fs(:db) %>
+
+# A failure, with no paid_at: Payment only requires that moment of a row that has one. It is here
+# because the failed count and the paid total must be able to disagree -- summing the table
+# regardless of status is exactly the bug this fixture catches.
+subscriber_failed:
+  user: subscriber
+  stripe_invoice_id: in_fixture_failed
+  amount_cents: 2500
+  currency: myr
+  status: failed
