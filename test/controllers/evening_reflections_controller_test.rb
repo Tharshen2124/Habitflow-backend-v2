@@ -1,7 +1,16 @@
 require "test_helper"
 
 class EveningReflectionsControllerTest < ActionDispatch::IntegrationTest
+  # Pinned to the Wednesday of the fixture week, because every write test here needs that week to
+  # still be live: `upsert` refuses a week that has ended, and FIXTURE_WEEK_START is a fixed date in
+  # the fixture YAML, so it is the clock that has to move rather than the week. Without this the
+  # suite quietly rotted as the real date passed 2026-08-24 -- three tests failed outright, and the
+  # two asserting a *validation* refusal went on passing on the week-ended refusal instead.
+  #
+  # Wednesday rather than any day of it: days 5 and 6 are then still ahead, which is what
+  # "including days still ahead" below is about.
   setup do
+    travel_to Date.new(2026, 8, 19)
     @user = users(:one)
     @plan = weekly_plans(:one)
   end
@@ -87,15 +96,13 @@ class EveningReflectionsControllerTest < ActionDispatch::IntegrationTest
   # Every day of the week is writable while the week is live -- a user reflecting on Thursday is
   # not blocked from filling in Monday, nor from writing Sunday ahead of time.
   test "any of the seven days can be written, in any order, including days still ahead" do
-    # Pinned to the Wednesday of the fixture week: Saturday and Sunday have not happened yet, and
-    # writing them must still be allowed. Fixtures already hold days 0 and 1.
-    travel_to Date.new(2026, 8, 19) do
-      [ 6, 3, 5 ].each do |day|
-        put "/weekly-plans/evening-reflections",
-          params: { week_start: FIXTURE_WEEK_START, day_of_week: day, content: "Day #{day}." },
-          headers: auth, as: :json
-        assert_response :success
-      end
+    # Saturday and Sunday have not happened yet at the pinned Wednesday, and writing them must
+    # still be allowed. Fixtures already hold days 0 and 1.
+    [ 6, 3, 5 ].each do |day|
+      put "/weekly-plans/evening-reflections",
+        params: { week_start: FIXTURE_WEEK_START, day_of_week: day, content: "Day #{day}." },
+        headers: auth, as: :json
+      assert_response :success
     end
 
     assert_equal [ 0, 1, 3, 5, 6 ], @plan.evening_reflections.order(:day_of_week).pluck(:day_of_week)
@@ -116,6 +123,7 @@ class EveningReflectionsControllerTest < ActionDispatch::IntegrationTest
       headers: auth, as: :json
 
     assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body)["errors"].join, "Content"
   end
 
   test "refuses an empty reflection" do
@@ -124,6 +132,7 @@ class EveningReflectionsControllerTest < ActionDispatch::IntegrationTest
       headers: auth, as: :json
 
     assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body)["errors"].join, "Content"
   end
 
   # The rule that keeps "a plan row exists" meaning "this week was planned": writing a reflection
