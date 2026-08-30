@@ -87,7 +87,6 @@ class CalendarEvent
 
   def description
     lines = link_lines
-    lines << "" << @task.description.strip if @task.is_fixed_appointment? && @task.description.present?
     lines << "" << priority_lines.join("\n") if priority_lines.any?
     lines.join("\n")
   end

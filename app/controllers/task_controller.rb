@@ -13,7 +13,7 @@ class TaskController < ApplicationController
   end
 
   def create_fixed_appointments
-    submitted = params.permit(appointments: [ :task_id, :title, :description, :day_of_week, :start_time, :end_time ])[:appointments] || []
+    submitted = params.permit(appointments: [ :task_id, :title, :day_of_week, :start_time, :end_time ])[:appointments] || []
 
     return render_unknown_task_id if unknown_task_ids(submitted, fixed: true).any?
 
@@ -21,7 +21,6 @@ class TaskController < ApplicationController
       reconcile_tasks(submitted, fixed: true) do |attrs|
         {
           task_name: attrs[:title],
-          description: attrs[:description],
           day_of_week: attrs[:day_of_week],
           start_time: attrs[:start_time],
           end_time: attrs[:end_time]
@@ -159,7 +158,6 @@ class TaskController < ApplicationController
     {
       task_id: task.task_id,
       title: task.task_name,
-      description: task.description,
       day_of_week: task.day_of_week,
       start_time: task.start_time.strftime("%H:%M"),
       end_time: task.end_time.strftime("%H:%M"),

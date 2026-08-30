@@ -52,7 +52,7 @@ class TaskControllerTest < ActionDispatch::IntegrationTest
       params: {
         week_start: FIXTURE_WEEK_START,
         appointments: [
-          { title: "Gym", description: "Leg day", day_of_week: 0, start_time: "06:00", end_time: "07:00" },
+          { title: "Gym", day_of_week: 0, start_time: "06:00", end_time: "07:00" },
           { title: "Standup", day_of_week: 2, start_time: "09:00", end_time: "09:30" }
         ]
       },

@@ -27,11 +27,10 @@ class CalendarEventTest < ActiveSupport::TestCase
     assert_includes description, "Sharpen the Saw: Social / Emotional"
   end
 
-  test "a fixed appointment says so and carries its own notes" do
+  test "a fixed appointment says so and names no goal" do
     description = body_for(tasks(:calendar_fixed))[:description]
 
     assert_includes description, "Fixed appointment"
-    assert_includes description, "Bring the draft"
     assert_not_includes description, "Goal:"
   end
 

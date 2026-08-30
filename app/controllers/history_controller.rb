@@ -188,7 +188,6 @@ class HistoryController < ApplicationController
     {
       task_id: task.task_id,
       title: task.task_name,
-      description: task.description,
       day_of_week: task.day_of_week,
       start_time: task.start_time.strftime("%H:%M"),
       end_time: task.end_time.strftime("%H:%M"),
