@@ -181,9 +181,9 @@ class HistoryController < ApplicationController
     }
   end
 
-  # weekly_plans#task_json plus `role_color_id`, which the schedule needs to tint a chip in its
-  # role's colour. `dimension` stays the raw stored string: the display names for the four
-  # dimensions live in the frontend, so it composes the final label.
+  # The same shape as weekly_plans#task_json, but read as recorded rather than as it stands now.
+  # `dimension` stays the raw stored string: the display names for the four dimensions live in the
+  # frontend, so it composes the final label.
   def task_json(task)
     {
       task_id: task.task_id,

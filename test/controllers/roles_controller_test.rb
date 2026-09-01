@@ -97,6 +97,25 @@ class RolesControllerTest < ActionDispatch::IntegrationTest
     assert_equal 2, user.roles.active.first.goals.count
   end
 
+  # Onboarding submits a colour with every role now that its step 1 offers the palette. The
+  # standing page has always sent one; this is the same column reached through the bulk create.
+  test "create persists the colour submitted with each role" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    post "/onboarding/roles",
+      params: {
+        week_start: FIXTURE_WEEK_START,
+        roles: [ { name: "Athlete", icon_id: "dumbbell", color_id: "teal", goals: [ { text: "Run a 10k" } ] } ]
+      },
+      headers: { "Authorization" => "Bearer #{token}" },
+      as: :json
+
+    assert_response :created
+    assert_equal "teal", JSON.parse(response.body)["roles"].first["color_id"]
+    assert_equal "teal", user.roles.active.first.color_id
+  end
+
   test "create stamps the created goals with the plan for the submitted week" do
     user = users(:one)
     token = JsonWebToken.encode(user.to_token_payload)

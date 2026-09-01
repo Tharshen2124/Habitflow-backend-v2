@@ -78,6 +78,22 @@ class WeeklyPlansControllerTest < ActionDispatch::IntegrationTest
     assert_nil task["dimension"]
   end
 
+  # The dashboard tints a task in the colour of the role behind it, and reads a week without ever
+  # fetching its goals -- so the colour has to ride on the task, exactly as `is_weekly_priority` does.
+  test "a goal-linked task reports its role's colour" do
+    user = users(:one)
+    roles(:one).update!(color_id: "teal")
+    token = JsonWebToken.encode(user.to_token_payload)
+    user.tasks.create!(task_name: "Deep work", goal: goals(:one), day_of_week: 1,
+                       start_time: "10:00", end_time: "11:00", weekly_plan: weekly_plans(:one))
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    task = JSON.parse(response.body)["weekly_plan"]["tasks"].find { |t| t["title"] == "Deep work" }
+    assert_equal "teal", task["role_color_id"]
+  end
+
   # The dashboard reads a week without ever fetching its goals, so the flag has to ride on the
   # task. It is the goal's, not the task's: `goals(:two)` is a weekly priority and `goals(:one)`
   # is not, and the two tasks below differ in nothing else.

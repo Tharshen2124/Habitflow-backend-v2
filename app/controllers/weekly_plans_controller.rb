@@ -108,6 +108,9 @@ class WeeklyPlansController < ApplicationController
       link_kind: link_kind(task),
       link_text: task.goal&.description || task.sharpen_the_saw_activity&.activity_description,
       role_name: task.goal&.role&.role_name,
+      # The role's colour, for the same reason `is_weekly_priority` rides along: the dashboard draws
+      # a week without ever fetching its goals, and it tints a task by the role behind it.
+      role_color_id: task.goal&.role&.color_id,
       dimension: task.sharpen_the_saw_activity&.dimension
     }
   end
