@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_08_30_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_09_05_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -127,6 +127,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_08_30_100000) do
     t.datetime "google_token_expires_at"
     t.string "google_uid"
     t.boolean "is_admin", default: false, null: false
+    t.boolean "is_banned", default: false, null: false
     t.boolean "is_onboarded", default: false, null: false
     t.string "password_digest"
     t.string "stripe_customer_id"

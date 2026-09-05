@@ -104,6 +104,10 @@ Rails.application.routes.draw do
   get "admin/overview" => "admin#overview"
   get "admin/users" => "admin#users"
   get "admin/payments" => "admin#payments"
+  # The only write here, and the only endpoint in the app that changes an account other than the
+  # caller's. `is_banned` is checked on every authenticated request, so this takes effect at once
+  # rather than when the banned account's seven-day token runs out.
+  patch "admin/users/:id/ban" => "admin#update_ban"
   # Defines the root path route ("/")
   # root "posts#index"
 end

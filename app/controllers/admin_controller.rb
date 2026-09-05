@@ -46,7 +46,7 @@ class AdminController < ApplicationController
 
   # The user list, newest account first.
   def users
-    scope = search(User.all, params[:q])
+    scope = by_access(search(User.all, params[:q]), params[:access])
     page, per_page, total = paginate(scope)
     # A tie-break on the primary key, not decoration: `created_at` has second resolution and two
     # accounts opened in the same second would otherwise be free to swap places between requests,
@@ -76,6 +76,32 @@ class AdminController < ApplicationController
     }
   end
 
+  # The one **write** on this controller, and the only endpoint anywhere that changes another
+  # account's row.
+  #
+  # Ban and unban are one action taking the state to end in rather than two, because an unban is not
+  # a different fact from a ban -- it is the same column, and the control on the dashboard is a
+  # toggle. The `banned` parameter is required rather than defaulted: a missing one would otherwise
+  # cast to false and quietly *unban* whoever the admin meant to ban.
+  def update_ban
+    user = User.find_by(user_id: params[:id])
+    return render json: { errors: [ "No such account" ] }, status: :not_found unless user
+
+    banned = ActiveModel::Type::Boolean.new.cast(params[:banned])
+    return render json: { errors: [ "banned must be true or false" ] }, status: :unprocessable_entity if banned.nil?
+
+    # An admin banning themselves would be locked out of the only page that could undo it: the guard
+    # is on this whole class, so their very next request would be refused before reaching here, and
+    # `is_banned` is granted and revoked by no other endpoint. Nothing stops one admin banning
+    # another -- both are granted by hand in the console, so the console is the way back.
+    if user.user_id == current_user.user_id
+      return render json: { errors: [ "You cannot ban your own account" ] }, status: :unprocessable_entity
+    end
+
+    user.update!(is_banned: banned)
+    render json: { user: { user_id: user.user_id, is_banned: user.is_banned } }
+  end
+
   private
 
   # 403, not 402. The paid tier's refusal means "this account has not bought this", which a user can
@@ -95,6 +121,10 @@ class AdminController < ApplicationController
       total: User.count,
       onboarded: User.where(is_onboarded: true).count,
       new_recently: User.where(created_at: RECENT_WINDOW.ago..).count,
+      # Not windowed like the two figures around it: a ban is a standing state, not something that
+      # happened in the last thirty days, and the number worth seeing is how many accounts are shut
+      # out right now.
+      banned: User.where(is_banned: true).count,
       # DISTINCT on tasks.user_id, which the column is denormalised onto -- a task names its user
       # as well as its week, so this needs no join.
       active_recently: Task.where(updated_at: RECENT_WINDOW.ago..).distinct.count(:user_id),
@@ -174,6 +204,17 @@ class AdminController < ApplicationController
 
   # --- Users ------------------------------------------------------------------------------------
 
+  # Narrows the list to banned accounts, or to the ones that can still sign in.
+  #
+  # Anything else -- including no parameter at all -- means every account, which is how `payments`
+  # treats a status it does not recognise and for the same reason: a filter value the client made up
+  # should show everything rather than nothing, since an empty table reads as a page that failed.
+  ACCESS_FILTERS = { "banned" => true, "active" => false }.freeze
+
+  def by_access(scope, access)
+    ACCESS_FILTERS.key?(access) ? scope.where(is_banned: ACCESS_FILTERS[access]) : scope
+  end
+
   # Matches an email or a username, case-insensitively, anywhere in the value.
   #
   # `sanitize_sql_like` is the whole point of this method being written out: without it a `%` typed
@@ -204,6 +245,7 @@ class AdminController < ApplicationController
         created_at: user.created_at.iso8601,
         is_onboarded: user.is_onboarded,
         is_admin: user.is_admin,
+        is_banned: user.is_banned,
         # The model's own answer, not a re-reading of the two columns: this is the figure the app
         # gates features on, so the dashboard must not be able to disagree with it.
         premium: user.premium?,

@@ -161,4 +161,87 @@ class AuthenticationControllerTest < ActionDispatch::IntegrationTest
     assert_match %r{\Ahttp://localhost:3001/login#token=}, response.location
     assert_equal "linked-google-uid", existing.reload.google_uid
   end
+
+  # --- bans --------------------------------------------------------------------------------------
+
+  # 403 and not the 401 a wrong password earns: the credentials were right, and the client has to
+  # tell "that was not your password" from "this account is banned" to know which of the two things
+  # to draw. The code is what says which 403 this is -- the other two mean not-an-admin and a
+  # checkout session belonging to somebody else.
+  test "a banned account is refused at password login, with the notice to display" do
+    user = users(:one)
+    user.update!(is_banned: true)
+
+    post "/login", params: { email: user.email, password: "password123" }
+
+    assert_response :forbidden
+    body = JSON.parse(response.body)
+    assert_equal "banned", body["code"]
+    assert_equal user.email, body["email"]
+    assert_equal ENV.fetch("ADMIN_CONTACT_EMAIL"), body["contact_email"]
+    assert_nil body["token"]
+  end
+
+  # The order of the two checks is the whole point. Reading the column first would answer a banned
+  # account's *address* with the ban notice however wrong the password was, which hands anyone who
+  # can type an email both the fact of the ban and the address to write to.
+  test "a wrong password on a banned account is still just a wrong password" do
+    users(:one).update!(is_banned: true)
+
+    post "/login", params: { email: users(:one).email, password: "not-the-password" }
+
+    assert_response :unauthorized
+    assert_equal "Invalid email or password", JSON.parse(response.body)["error"]
+  end
+
+  test "a banned account is refused at the Google callback and its tokens are left alone" do
+    user = users(:two)
+    user.update!(is_banned: true, google_access_token: "old-at", google_refresh_token: "old-rt")
+    state = JsonWebToken.encode({ purpose: AuthenticationController::STATE_PURPOSE })
+
+    stub_google_oauth(
+      exchange_result: { "access_token" => "new-at", "refresh_token" => "new-rt",
+                         "expires_in" => 3600, "scope" => "openid email profile" },
+      profile_result: { "sub" => user.google_uid, "email" => user.email }
+    ) do
+      get "/callback", params: { code: "x", state: state }
+    end
+
+    assert_response :redirect
+    assert_includes response.location, "error=banned"
+    assert_includes response.location, CGI.escape(user.email)
+    # No session token anywhere in the fragment, and the grant it may no longer use is untouched.
+    assert_no_match(/token=/, response.location)
+    assert_equal "old-rt", user.reload.google_refresh_token
+  end
+
+  # The reason the check is in Authenticatable rather than only on the two login doors: a token
+  # minted before the ban lives seven days, so a front-door-only ban would be a ban in name for most
+  # of a week.
+  test "a token minted before the ban stops working at once" do
+    user = users(:one)
+    stale = { "Authorization" => "Bearer #{JsonWebToken.encode(user.to_token_payload)}" }
+    path = "/roles?week_start=#{FIXTURE_WEEK_START}"
+    get path, headers: stale, as: :json
+    assert_response :success
+
+    user.update!(is_banned: true)
+
+    get path, headers: stale, as: :json
+    assert_response :forbidden
+    assert_equal "banned", JSON.parse(response.body)["code"]
+  end
+
+  test "an unban puts the account straight back" do
+    user = users(:one)
+    user.update!(is_banned: true)
+    post "/login", params: { email: user.email, password: "password123" }
+    assert_response :forbidden
+
+    user.update!(is_banned: false)
+    post "/login", params: { email: user.email, password: "password123" }
+
+    assert_response :success
+    assert JSON.parse(response.body)["token"].present?
+  end
 end

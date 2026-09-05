@@ -65,6 +65,92 @@ class AdminControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # --- banning -----------------------------------------------------------------------------------
+
+  def ban(user, banned, as: admin)
+    patch "/admin/users/#{user.user_id}/ban", params: { banned: banned }, headers: auth(as), as: :json
+  end
+
+  test "banning is refused to an ordinary account" do
+    ban(users(:two), true, as: users(:one))
+    assert_response :forbidden
+    assert_not users(:two).reload.is_banned
+  end
+
+  test "an admin bans and unbans an account" do
+    user = users(:one)
+
+    ban(user, true)
+    assert_response :success
+    assert user.reload.is_banned
+    assert JSON.parse(response.body)["user"]["is_banned"]
+
+    ban(user, false)
+    assert_response :success
+    assert_not user.reload.is_banned
+  end
+
+  # The admin would be locked out of the only page that could undo it: the guard is on this whole
+  # class, so their next request would be refused before reaching the action that unbans them.
+  test "an admin cannot ban themselves" do
+    ban(admin, true)
+    assert_response :unprocessable_entity
+    assert_not admin.reload.is_banned
+  end
+
+  # A missing parameter casts to false, which would silently unban whoever the admin meant to ban.
+  test "the state to end in is required" do
+    patch "/admin/users/#{users(:one).user_id}/ban", headers: auth(admin), as: :json
+    assert_response :unprocessable_entity
+    assert_not users(:one).reload.is_banned
+  end
+
+  test "banning an account that does not exist is a 404" do
+    patch "/admin/users/0/ban", params: { banned: true }, headers: auth(admin), as: :json
+    assert_response :not_found
+  end
+
+  test "the list filters to banned accounts and to the ones that can still sign in" do
+    users(:one).update!(is_banned: true)
+
+    banned = get_json("/admin/users?access=banned")["users"]
+    assert_equal [ users(:one).user_id ], banned.map { |row| row["user_id"] }
+
+    active = get_json("/admin/users?access=active")["users"]
+    assert_not_includes active.map { |row| row["user_id"] }, users(:one).user_id
+    assert_equal User.count - 1, get_json("/admin/users?access=active")["pagination"]["total"]
+  end
+
+  # The filter narrows the same scope the search does, rather than replacing it.
+  test "the access filter and the search term apply together" do
+    users(:one).update!(is_banned: true)
+    users(:two).update!(is_banned: true)
+
+    rows = get_json("/admin/users?access=banned&q=#{CGI.escape(users(:two).email)}")["users"]
+    assert_equal [ users(:two).user_id ], rows.map { |row| row["user_id"] }
+  end
+
+  # An unrecognised value shows every account rather than none: an empty table reads as a page that
+  # failed to load, which is the worse of the two wrongs.
+  test "an access filter the client made up shows everything" do
+    assert_equal User.count, get_json("/admin/users?access=nonsense")["pagination"]["total"]
+  end
+
+  test "the overview counts banned accounts" do
+    assert_equal 0, get_json("/admin/overview")["users"]["banned"]
+
+    users(:one).update!(is_banned: true)
+    assert_equal 1, get_json("/admin/overview")["users"]["banned"]
+  end
+
+  test "the user list says which accounts are banned" do
+    users(:one).update!(is_banned: true)
+    rows = get_json("/admin/users")["users"]
+
+    assert rows.find { |row| row["user_id"] == users(:one).user_id }["is_banned"]
+    assert_not rows.find { |row| row["user_id"] == users(:two).user_id }["is_banned"]
+  end
+
   # --- overview ----------------------------------------------------------------------------------
 
   test "user metrics count the whole table, admins included" do

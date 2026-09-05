@@ -201,3 +201,41 @@ Three things about the payloads are load-bearing:
   tie-break so two rows created in the same second cannot swap between pages, and clamped to the
   last page that exists rather than answering an empty table. Search escapes with
   `sanitize_sql_like`, or a `%` typed into the box would be a wildcard matching every account.
+
+### Bans
+
+`PATCH /admin/users/:id/ban` is the **one write on `AdminController`**, and the only endpoint in the
+app that changes a row other than the caller's. Ban and unban are one action taking the state to end
+in, because an unban is the same column going the other way; `banned` is required rather than
+defaulted, since a missing parameter would cast to false and silently unban whoever the admin meant
+to ban. An admin cannot ban themselves — the guard is on the whole class, so their next request
+would be refused before reaching the action that undoes it.
+
+`users.is_banned` is a column for the reason `is_admin` is: one more fact about an ordinary account,
+not a second kind of account. It is **not** a JWT claim, for the reason `premium?` is not — a token
+lives seven days in a cookie, and a ban that waited for it to expire would be a ban in name for most
+of a week. So it is read off the column by `Authenticatable` on **every authenticated request**, not
+only by the two login doors, and `authentication_controller_test.rb` pins that a token minted before
+the ban stops working at once.
+
+Two orderings are load-bearing:
+
+- **The password is verified before the column is read.** Refusing on `is_banned` first would answer
+  a banned *address* with the ban notice however wrong the password was, handing anyone who can type
+  an email both the fact of the ban and the address to write to.
+- **The Google callback refuses before the token write**, so a banned account's Google grant is not
+  refreshed on the way to being turned away.
+
+`GET /admin/users` takes `access=banned|active`, which narrows the **same scope the search does**
+rather than replacing it. An unrecognised value shows every account, the way `payments` treats a
+status it does not know: an empty table reads as a page that failed to load, which is the worse of
+the two wrongs. `users.banned` on the overview is the count that motivates the filter, and is
+deliberately not windowed like `new_recently` beside it — a ban is a standing state, not something
+that happened in the last thirty days.
+
+A refusal is **403 with `code: "banned"` in the body**, not a fourth status. 403 already means two
+things here (not an administrator, and a checkout session belonging to somebody else) and the client
+has to tell them apart, so `ApplicationController#render_banned` sends a code beside the status
+along with the account's email and `ADMIN_CONTACT_EMAIL` — the frontend holds no copy of that
+address. The OAuth road home has no body, so `redirect_banned` puts the same three facts in the
+fragment, which is why `next-app` has one handler for all three doors a ban can be found at.

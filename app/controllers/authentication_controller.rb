@@ -30,6 +30,9 @@ class AuthenticationController < ApplicationController
     # back to /login to create one the ordinary way rather than being handed a session.
     user = User.link_google_account(google_uid: profile["sub"], email: profile["email"])
     return redirect_with_error("no_account") unless user
+    # Before the token write below, not after: a banned account is not signing in, so there is no
+    # reason to refresh the Google grant it is no longer allowed to use.
+    return redirect_banned(user) if user.is_banned?
 
     user.update!(
       google_access_token: tokens["access_token"],
@@ -46,16 +49,31 @@ class AuthenticationController < ApplicationController
 
   def password_login
     user = User.find_by("lower(email) = ?", params[:email].to_s.downcase)
-    if user&.password_digest.present? && user.authenticate(params[:password])
-      render json: { token: JsonWebToken.encode(user.to_token_payload) }, status: :ok
-    else
-      render json: { error: "Invalid email or password" }, status: :unauthorized
+    unless user&.password_digest.present? && user.authenticate(params[:password])
+      return render json: { error: "Invalid email or password" }, status: :unauthorized
     end
+
+    # Only once the password has been verified. Asking the column first would let anyone type an
+    # address into the form and be told both that it is banned and who to write to about it, which
+    # is an account-enumeration oracle bought for no gain -- the person being banned knows their own
+    # password.
+    return render_banned(user) if user.is_banned?
+
+    render json: { token: JsonWebToken.encode(user.to_token_payload) }, status: :ok
   end
 
   def redirect_to_google
     state = JsonWebToken.encode({ purpose: STATE_PURPOSE }, exp: 5.minutes.from_now)
     redirect_to GoogleOauthClient.authorization_url(state), allow_other_host: true
+  end
+
+  # `render_banned`'s twin for the OAuth road home, which cannot answer with a body. The notice
+  # travels in the fragment exactly as the session token does, so the login page has one place that
+  # turns a ban into its dialog no matter which door the user came through.
+  def redirect_banned(user)
+    notice = { error: ApplicationController::BANNED_CODE, email: user.email,
+               contact: ENV.fetch("ADMIN_CONTACT_EMAIL") }
+    redirect_to "#{ENV.fetch('FRONTEND_ORIGIN')}/login##{notice.to_query}", allow_other_host: true
   end
 
   def redirect_with_error(code)
