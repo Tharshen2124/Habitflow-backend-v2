@@ -143,6 +143,57 @@ class WeeklyPlansControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Morning run", task["link_text"]
     assert_equal "physical", task["dimension"]
     assert_nil task["role_name"]
+    assert_equal false, task["link_deleted"]
+  end
+
+  # Deleting an activity leaves the tasks already scheduled against it on the week's calendar --
+  # `destroy_activity` soft-deletes the row and touches nothing else. The dashboard still names it,
+  # and this flag is how it says the name will not be found in the library any more.
+  test "still names an activity deleted since, and says that it was" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    user.tasks.create!(task_name: "Sit quietly", sharpen_the_saw_activity: sharpen_the_saw_activities(:three),
+                       day_of_week: 1, start_time: "07:00", end_time: "07:30", weekly_plan: weekly_plans(:one))
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    task = JSON.parse(response.body)["weekly_plan"]["tasks"].find { |t| t["title"] == "Sit quietly" }
+    assert_equal "Evening meditation", task["link_text"]
+    assert_equal "spiritual", task["dimension"]
+    assert_equal true, task["link_deleted"]
+  end
+
+  # The goal half of the same rule. Only a *completed* task outlives its goal -- ArchiveGoal removes
+  # the unfinished ones -- so that is the task this reports on.
+  test "still names a goal dropped since, and says that it was" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+    task = user.tasks.create!(task_name: "Deep work", goal: goals(:one), day_of_week: 1,
+                              start_time: "10:00", end_time: "11:00", weekly_plan: weekly_plans(:one),
+                              is_completed: true)
+    ArchiveGoal.call(goals(:one))
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    body = JSON.parse(response.body)["weekly_plan"]["tasks"].find { |t| t["task_id"] == task.task_id }
+    assert_equal "Complete quarterly project milestone", body["link_text"]
+    assert_equal "Professional", body["role_name"]
+    assert_equal true, body["link_deleted"]
+  end
+
+  # "No link at all" is not "a link that has gone", and the client reads this field on every task.
+  test "reports a fixed appointment's absent link as not deleted" do
+    user = users(:one)
+    token = JsonWebToken.encode(user.to_token_payload)
+
+    get "/weekly-plans?week_start=#{FIXTURE_WEEK_START}",
+      headers: { "Authorization" => "Bearer #{token}" }, as: :json
+
+    task = JSON.parse(response.body)["weekly_plan"]["tasks"].find { |t| t["title"] == "Morning workout" }
+    assert_nil task["link_kind"]
+    assert_equal false, task["link_deleted"]
   end
 
   test "returns tasks in day then time order" do

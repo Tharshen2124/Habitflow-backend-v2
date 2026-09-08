@@ -107,6 +107,11 @@ class WeeklyPlansController < ApplicationController
       is_completed: task.is_completed,
       link_kind: link_kind(task),
       link_text: task.goal&.description || task.sharpen_the_saw_activity&.activity_description,
+      # Whether the thing named above has since been deleted. The name is still sent -- soft delete
+      # hides something from the future, never from the past, and a task already on this week's
+      # calendar is the past -- but a user looking at it deserves to know why they cannot find it
+      # on /sharpen-the-saw or /roles any more. The same fact /history flags as `is_deleted`.
+      link_deleted: link_deleted?(task),
       role_name: task.goal&.role&.role_name,
       # The role's colour, for the same reason `is_weekly_priority` rides along: the dashboard draws
       # a week without ever fetching its goals, and it tints a task by the role behind it.
@@ -120,5 +125,12 @@ class WeeklyPlansController < ApplicationController
     return "activity" if task.sharpen_the_saw_activity_id.present?
 
     nil
+  end
+
+  # False rather than nil for a task that links to nothing: the client asks this of every task, and
+  # "no link" is not "a link that has gone".
+  def link_deleted?(task)
+    record = task.goal || task.sharpen_the_saw_activity
+    record.present? && record.deleted_at.present?
   end
 end
