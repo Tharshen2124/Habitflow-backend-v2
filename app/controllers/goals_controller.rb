@@ -8,7 +8,6 @@ class GoalsController < ApplicationController
   before_action :find_weekly_plan, only: [ :carry_forward_candidates ]
   before_action :set_weekly_plan, except: [ :carry_forward_candidates ]
   before_action :set_goal, only: [ :update, :destroy ]
-  before_action :set_dropped_goal, only: [ :restore ]
 
   def create
     role = current_user.roles.active.find(params[:role_id])
@@ -33,18 +32,6 @@ class GoalsController < ApplicationController
     archived = ArchiveGoal.call(@goal)
     sync_calendar_later
     render json: { archived: archived }
-  end
-
-  # Backs the undo affordance on the roles page. Restricted to the requested week: reviving a goal
-  # dropped weeks ago would silently rewrite that week's outcomes from "dropped" back to "missed".
-  def restore
-    if @goal.weekly_plan_id != @weekly_plan.weekly_plan_id
-      return render json: { errors: [ "Only a goal in the requested week can be restored" ] },
-                    status: :unprocessable_entity
-    end
-
-    ArchiveGoal.restore(@goal)
-    render json: { goal: goal_json(@goal) }
   end
 
   # Last week's goals, offered as a starting point for this one. Goals belonging to an archived
@@ -100,12 +87,6 @@ class GoalsController < ApplicationController
 
   def set_goal
     @goal = user_goals.active.find(params[:id])
-  rescue ActiveRecord::RecordNotFound
-    render json: { error: "Goal not found" }, status: :not_found
-  end
-
-  def set_dropped_goal
-    @goal = user_goals.dropped.find(params[:id])
   rescue ActiveRecord::RecordNotFound
     render json: { error: "Goal not found" }, status: :not_found
   end

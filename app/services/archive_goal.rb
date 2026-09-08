@@ -23,9 +23,4 @@ class ArchiveGoal
       end
     end
   end
-
-  def self.restore(goal)
-    goal.update!(deleted_at: nil)
-    goal
-  end
 end

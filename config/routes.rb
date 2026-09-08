@@ -36,7 +36,6 @@ Rails.application.routes.draw do
   post "goals" => "goals#create"
   patch "goals/:id" => "goals#update"
   delete "goals/:id" => "goals#destroy"
-  post "goals/:id/restore" => "goals#restore"
   # The repeatable planning flow. It shares the task controller with onboarding -- the actions are
   # identical -- but onboarding is walked once and never returned to, so a flow the user runs every
   # week should not be posting to /onboarding paths.

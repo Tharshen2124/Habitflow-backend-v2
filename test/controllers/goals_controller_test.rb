@@ -83,28 +83,6 @@ class GoalsControllerTest < ActionDispatch::IntegrationTest
     assert_not_predicate goals(:three).reload, :dropped?
   end
 
-  test "restore brings back a goal dropped in the same week" do
-    goals(:one).update!(deleted_at: Time.current)
-
-    post "/goals/#{goals(:one).goal_id}/restore",
-      params: { week_start: FIXTURE_WEEK_START }, headers: auth, as: :json
-
-    assert_response :success
-    assert_not_predicate goals(:one).reload, :dropped?
-  end
-
-  # Undo is for the mistake you just made. Reviving a goal dropped weeks ago would rewrite that
-  # week's outcome from "dropped" back to "missed".
-  test "restore refuses a goal that belongs to a different week" do
-    goals(:one).update!(deleted_at: Time.current)
-
-    post "/goals/#{goals(:one).goal_id}/restore",
-      params: { week_start: "2026-08-24" }, headers: auth, as: :json
-
-    assert_response :unprocessable_entity
-    assert_predicate goals(:one).reload, :dropped?
-  end
-
   test "carry-forward candidates lists last week's live goals" do
     get "/goals/carry-forward-candidates?week_start=2026-08-24", headers: auth, as: :json
 
