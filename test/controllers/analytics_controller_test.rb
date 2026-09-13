@@ -80,14 +80,34 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
                  weeks.map { |w| w["week_start"] }
   end
 
-  # --- goals -----------------------------------------------------------------------------------
+  # --- tasks -----------------------------------------------------------------------------------
 
-  test "counts active goals only, and reports the dropped one beside the ratio" do
-    # Three active goals -- the dropped one is out of the denominator so pruning cannot raise the
-    # rate -- of which one had every task done. The goal on the archived role has no task scheduled
-    # against it at all, and `Goal.achieved` is deliberately not vacuous: nothing to do is not the
-    # same as everything done.
-    assert_equal({ "achieved" => 1, "total" => 3, "dropped" => 1 }, past_week["goals"])
+  test "counts every scheduled task in the week, whatever it serves" do
+    # Two goal-linked tasks and one Sharpen the Saw task, two of them done. The fixed appointment
+    # is not a task the user set out to complete, so it is out of both halves of the ratio.
+    assert_equal({ "completed" => 2, "total" => 3 }, past_week["tasks"])
+  end
+
+  test "counts a task linked to nothing, which no other figure reaches" do
+    Task.create!(
+      user: users(:three),
+      weekly_plan: weekly_plans(:past),
+      task_name: "Clear the inbox",
+      day_of_week: 4,
+      start_time: "16:00",
+      end_time: "16:30"
+    )
+
+    week = past_week
+
+    assert_equal({ "completed" => 2, "total" => 4 }, week["tasks"])
+    assert_equal 3, week["roles"].sum { |r| r["total"] } + week["dimensions"].sum { |d| d["total"] }
+  end
+
+  test "a planned week with nothing scheduled reports zero tasks rather than going missing" do
+    weekly_plans(:past).tasks.where(is_fixed_appointment: false).delete_all
+
+    assert_equal({ "completed" => 0, "total" => 0 }, past_week["tasks"])
   end
 
   # --- roles -----------------------------------------------------------------------------------
@@ -159,6 +179,7 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal 3, week["roles"].sum { |r| r["total"] } + week["dimensions"].sum { |d| d["total"] },
                  "the week's four tasks less the fixed appointment"
+    assert_equal 3, week["tasks"]["total"]
     assert_empty week["daily_priorities"].select { |d| d["day_of_week"] == tasks(:past_fixed).day_of_week }
   end
 

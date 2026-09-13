@@ -38,7 +38,7 @@ class AnalyticsController < ApplicationController
     roles = role_counts(ids)
     dimensions = dimension_counts(ids)
     priorities = daily_priority_counts(ids)
-    goals = goal_counts(ids)
+    tasks = task_counts(ids)
 
     plans.map do |plan|
       id = plan.weekly_plan_id
@@ -48,7 +48,7 @@ class AnalyticsController < ApplicationController
         dimensions: dimensions.fetch(id, []),
         roles: roles.fetch(id, []),
         daily_priorities: priorities.fetch(id, []),
-        goals: goals.fetch(id, { achieved: 0, total: 0, dropped: 0 })
+        tasks: tasks.fetch(id)
       }
     end
   end
@@ -124,22 +124,21 @@ class AnalyticsController < ApplicationController
     end
   end
 
-  # Goals are counted `.active`, so a goal the user dropped mid-week cannot sit in the denominator
-  # -- pruning one would otherwise raise the percentage. It is reported beside the ratio instead,
-  # the same rule history#week_summaries follows and the one ERD_businnes_rules.md states: a
-  # dropped goal is neither a failure nor a quiet improvement.
-  def goal_counts(ids)
-    goals = Goal.where(weekly_plan_id: ids)
-    totals = goals.active.group(:weekly_plan_id).count
-    achieved = goals.active.achieved.group(:weekly_plan_id).count
-    dropped = goals.dropped.group(:weekly_plan_id).count
+  # Every scheduled task in the week, whatever it serves -- a goal, an activity, or nothing at all.
+  # Tasks rather than goals because a week holds a handful of goals and dozens of tasks, so the rate
+  # moves in steps a trend line can show. Fixed appointments are left out, the same line
+  # history#week_summaries draws: a lecture is attended rather than completed, and counting it would
+  # pad the rate with things nobody planned to do.
+  #
+  # Deleting an unfinished task cannot flatter the rate the way pruning a goal could: a deleted task
+  # is gone from the week, and a completed one cannot be deleted at all (TaskController#reconcile_tasks).
+  def task_counts(ids)
+    tasks = Task.where(weekly_plan_id: ids, is_fixed_appointment: false)
+    totals = tasks.group(:weekly_plan_id).count
+    completed = tasks.where(is_completed: true).group(:weekly_plan_id).count
 
     ids.index_with do |id|
-      {
-        achieved: achieved.fetch(id, 0),
-        total: totals.fetch(id, 0),
-        dropped: dropped.fetch(id, 0)
-      }
+      { completed: completed.fetch(id, 0), total: totals.fetch(id, 0) }
     end
   end
 end
