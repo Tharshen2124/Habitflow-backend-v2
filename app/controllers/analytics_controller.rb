@@ -38,17 +38,19 @@ class AnalyticsController < ApplicationController
     roles = role_counts(ids)
     dimensions = dimension_counts(ids)
     priorities = daily_priority_counts(ids)
-    tasks = task_counts(ids)
+    task_counts = task_counts(ids)
 
     plans.map do |plan|
       id = plan.weekly_plan_id
+      tasks, fixed_appointments = task_counts.fetch(id)
       {
         week_start: plan.start_date.iso8601,
         end_date: plan.end_date.iso8601,
         dimensions: dimensions.fetch(id, []),
         roles: roles.fetch(id, []),
         daily_priorities: priorities.fetch(id, []),
-        tasks: tasks.fetch(id)
+        tasks: tasks,
+        fixed_appointments: fixed_appointments
       }
     end
   end
@@ -124,21 +126,29 @@ class AnalyticsController < ApplicationController
     end
   end
 
-  # Every scheduled task in the week, whatever it serves -- a goal, an activity, or nothing at all.
-  # Tasks rather than goals because a week holds a handful of goals and dozens of tasks, so the rate
-  # moves in steps a trend line can show. Fixed appointments are left out, the same line
-  # history#week_summaries draws: a lecture is attended rather than completed, and counting it would
-  # pad the rate with things nobody planned to do.
+  # Every scheduled task in the week, whatever it serves -- a goal, an activity, or nothing at all --
+  # and, *beside* it, the week's fixed appointments. Tasks rather than goals because a week holds a
+  # handful of goals and dozens of tasks, so the rate moves in steps a trend line can show.
+  #
+  # The two are counted apart rather than pooled, though the check-in asks about both. A fixed
+  # appointment is usually a lecture or a shift that recurs and is nearly always kept, so a pooled
+  # rate would move with how many of them a week happened to hold rather than with anything the
+  # user did -- the same follow-through reads higher in a week with more lectures. Apart, each is a
+  # figure about one thing. It is the split history#week_summaries already makes.
   #
   # Deleting an unfinished task cannot flatter the rate the way pruning a goal could: a deleted task
   # is gone from the week, and a completed one cannot be deleted at all (TaskController#reconcile_tasks).
+  #
+  # Returns `[tasks, fixed_appointments]` per plan, from one grouped count rather than one per kind.
   def task_counts(ids)
-    tasks = Task.where(weekly_plan_id: ids, is_fixed_appointment: false)
-    totals = tasks.group(:weekly_plan_id).count
-    completed = tasks.where(is_completed: true).group(:weekly_plan_id).count
+    tasks = Task.where(weekly_plan_id: ids)
+    totals = tasks.group(:weekly_plan_id, :is_fixed_appointment).count
+    completed = tasks.where(is_completed: true).group(:weekly_plan_id, :is_fixed_appointment).count
 
     ids.index_with do |id|
-      { completed: completed.fetch(id, 0), total: totals.fetch(id, 0) }
+      [ false, true ].map do |fixed|
+        { completed: completed.fetch([ id, fixed ], 0), total: totals.fetch([ id, fixed ], 0) }
+      end
     end
   end
 end

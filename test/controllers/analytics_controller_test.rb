@@ -83,9 +83,20 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
   # --- tasks -----------------------------------------------------------------------------------
 
   test "counts every scheduled task in the week, whatever it serves" do
-    # Two goal-linked tasks and one Sharpen the Saw task, two of them done. The fixed appointment
-    # is not a task the user set out to complete, so it is out of both halves of the ratio.
+    # Two goal-linked tasks and one Sharpen the Saw task, two of them done. The fixed appointment is
+    # counted on its own, so it is out of both halves of this ratio.
     assert_equal({ "completed" => 2, "total" => 3 }, past_week["tasks"])
+  end
+
+  test "counts fixed appointments apart from the tasks rather than pooled with them" do
+    assert_equal({ "completed" => 0, "total" => 1 }, past_week["fixed_appointments"])
+
+    # The check-in asks about a fixed appointment too, and ticking one moves its own figure alone.
+    tasks(:past_fixed).update!(is_completed: true)
+    week = past_week
+
+    assert_equal({ "completed" => 1, "total" => 1 }, week["fixed_appointments"])
+    assert_equal({ "completed" => 2, "total" => 3 }, week["tasks"])
   end
 
   test "counts a task linked to nothing, which no other figure reaches" do
@@ -107,7 +118,10 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
   test "a planned week with nothing scheduled reports zero tasks rather than going missing" do
     weekly_plans(:past).tasks.where(is_fixed_appointment: false).delete_all
 
-    assert_equal({ "completed" => 0, "total" => 0 }, past_week["tasks"])
+    week = past_week
+
+    assert_equal({ "completed" => 0, "total" => 0 }, week["tasks"])
+    assert_equal({ "completed" => 0, "total" => 1 }, week["fixed_appointments"])
   end
 
   # --- roles -----------------------------------------------------------------------------------
@@ -174,12 +188,13 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
     assert_equal [ { "day_of_week" => 3, "completed" => 0, "total" => 1 } ], priorities
   end
 
-  test "a fixed appointment reaches none of the four figures" do
+  test "a fixed appointment reaches only its own figure" do
     week = past_week
 
     assert_equal 3, week["roles"].sum { |r| r["total"] } + week["dimensions"].sum { |d| d["total"] },
                  "the week's four tasks less the fixed appointment"
     assert_equal 3, week["tasks"]["total"]
+    assert_equal 1, week["fixed_appointments"]["total"]
     assert_empty week["daily_priorities"].select { |d| d["day_of_week"] == tasks(:past_fixed).day_of_week }
   end
 
